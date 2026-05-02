@@ -1,3 +1,506 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* 3D Card flip styles */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Animated Space Background */
+@keyframes space-twinkle {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Card idle animations — 5 different types, calm and non-nauseating */
+@keyframes card-breathe {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes card-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.45);
+  }
+}
+
+@keyframes card-sway {
+
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  25% {
+    transform: rotate(1.5deg);
+  }
+
+  75% {
+    transform: rotate(-1.5deg);
+  }
+}
+
+@keyframes card-fade {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@keyframes card-squish {
+
+  0%,
+  100% {
+    transform: scaleX(1) scaleY(1);
+  }
+
+  50% {
+    transform: scaleX(1.04) scaleY(0.96);
+  }
+}
+
+.animate-card-breathe {
+  animation: card-breathe 4s ease-in-out infinite;
+}
+
+.animate-card-glow {
+  animation: card-glow 3.5s ease-in-out infinite;
+}
+
+/* Card floating animation — smooth clockwise circular orbit */
+@keyframes card-float {
+  0% {
+    transform: translate(12px, 0px);
+  }
+
+  25% {
+    transform: translate(0px, 12px);
+  }
+
+  50% {
+    transform: translate(-12px, 0px);
+  }
+
+  75% {
+    transform: translate(0px, -12px);
+  }
+
+  100% {
+    transform: translate(12px, 0px);
+  }
+}
+
+.animate-card-float {
+  animation: card-float 4s linear infinite;
+}
+
+.animate-card-sway {
+  animation: card-sway 5s ease-in-out infinite;
+}
+
+.animate-card-fade {
+  animation: card-fade 4.5s ease-in-out infinite;
+}
+
+.animate-card-squish {
+  animation: card-squish 3.8s ease-in-out infinite;
+}
+
+/* Card Match Animations */
+@keyframes match-success {
+  0% {
+    transform: scale(1) rotateY(180deg);
+  }
+
+  50% {
+    transform: scale(1.1) rotateY(180deg);
+  }
+
+  100% {
+    transform: scale(1) rotateY(180deg);
+  }
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0) rotateY(180deg);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-5px) rotateY(180deg);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(5px) rotateY(180deg);
+  }
+}
+
+@keyframes wrong-flash {
+
+  0%,
+  100% {
+    background: linear-gradient(to bottom right, #fef3c7, #fed7aa);
+  }
+
+  50% {
+    background: linear-gradient(to bottom right, #fecaca, #fca5a5);
+  }
+}
+
+@keyframes sparkle {
+
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0) rotate(0deg);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(180deg);
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-100vh) rotate(0deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+@keyframes firework {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+
+  70% {
+    transform: scale(0.9);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-bounceIn {
+  animation: bounceIn 0.5s ease-out;
+}
+
+/* Game-specific animations */
+.animate-match {
+  animation: match-success 0.5s ease-out;
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-out;
+}
+
+.animate-wrong {
+  animation: wrong-flash 0.3s ease-out;
+}
+
+.animate-sparkle {
+  animation: sparkle 0.6s ease-out;
+}
+
+.animate-twinkle {
+  animation: space-twinkle 2s ease-in-out infinite;
+}
+
+/* Space background */
+.space-bg {
+  background:
+    radial-gradient(ellipse at top, #1e1b4b 0%, transparent 50%),
+    radial-gradient(ellipse at bottom, #312e81 0%, transparent 50%),
+    linear-gradient(to bottom, #0f0f23, #1a1a2e, #16213e, #0f0f23);
+  background-size: 100% 100%, 100% 100%, 100% 400%;
+  background-position: top center, bottom center, top left;
+  animation: space-gradient 20s linear infinite;
+}
+
+@keyframes space-gradient {
+  0% {
+    background-position: top center, bottom center, top left;
+  }
+
+  100% {
+    background-position: top center, bottom center, top left -400px;
+  }
+}
+
+/* Stars */
+.star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: white;
+  border-radius: 50%;
+  animation: space-twinkle 3s ease-in-out infinite;
+}
+
+/* Hint glow animation (UFO bonus) */
+@keyframes hint-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 30px rgba(34, 211, 238, 0.8), 0 0 60px rgba(34, 211, 238, 0.3);
+  }
+}
+
+@keyframes hint-pulse {
+
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes hint-beam {
+  0% {
+    opacity: 0.3;
+    transform: translateX(-50%) scaleY(0.5);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: translateX(-50%) scaleY(1);
+  }
+
+  100% {
+    opacity: 0.3;
+    transform: translateX(-50%) scaleY(0.5);
+  }
+}
+
+.animate-hint-glow {
+  animation: hint-glow 0.8s ease-in-out infinite;
+}
+
+.animate-hint-pulse {
+  animation: hint-pulse 0.6s ease-in-out infinite;
+}
+
+.animate-hint-beam {
+  animation: hint-beam 1s ease-in-out infinite;
+}
+
+/* Trap silhouette */
+.trap-silhouette {
+  filter: grayscale(1) brightness(0.3) contrast(2);
+  opacity: 0.7;
+  text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+}
+
+.trap-silhouette-glow {
+  /* Static silhouette only, no animation */
+}
+
+/* Freeze effect on board */
+.board-frozen {
+  pointer-events: none;
+  animation: freeze-overlay 1s ease-in-out infinite;
+}
+
+@keyframes freeze-overlay {
+
+  0%,
+  100% {
+    box-shadow: inset 0 0 30px rgba(56, 189, 248, 0.2);
+  }
+
+  50% {
+    box-shadow: inset 0 0 60px rgba(56, 189, 248, 0.4);
+  }
+}
+
+/* Shuffle animation */
+@keyframes shuffle-card {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+
+  25% {
+    transform: scale(0.5) rotate(90deg);
+    opacity: 0.5;
+  }
+
+  50% {
+    transform: scale(0) rotate(180deg);
+    opacity: 0;
+  }
+
+  75% {
+    transform: scale(0.5) rotate(270deg);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(1) rotate(360deg);
+    opacity: 1;
+  }
+}
+
+.animate-shuffle {
+  animation: shuffle-card 0.6s ease-in-out;
+}
+
+/* Trap triggered flash */
+@keyframes trap-flash {
+
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  25% {
+    background-color: rgba(239, 68, 68, 0.3);
+  }
+
+  50% {
+    background-color: rgba(239, 68, 68, 0.1);
+  }
+
+  75% {
+    background-color: rgba(239, 68, 68, 0.2);
+  }
+}
+
+.animate-trap-flash {
+  animation: trap-flash 1s ease-out;
+}
+
+/* Level up animation */
+@keyframes level-up {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-level-up {
+  animation: level-up 0.8s ease-out;
+}
+
+/* Smooth transitions */
+* {
+  -webkit-tap-highlight-color: transparent;
+}

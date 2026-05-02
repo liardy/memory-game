@@ -1,0 +1,119 @@
+import React from 'react';
+
+export interface Bonus {
+  id: string;
+  emoji: string;
+  name: string;
+  description: string;
+  count: number;
+}
+
+export interface BonusInfo {
+  emoji: string;
+  bonusType: Bonus;
+}
+
+export interface TrapInfo {
+  emoji: string;
+  description: string;
+  markedCount: number;
+  totalCards: number;
+}
+
+interface ScorePanelProps {
+  level: number;
+  maxLevel: number;
+  timeLeft: number;
+  maxTime: number;
+  matchedPairs: number;
+  totalPairs: number;
+  bestScore: number;
+  onRestart: () => void;
+  onBackdoor: () => void;
+  onFAQ: () => void;
+  timerFrozen: boolean;
+  boardFrozen: boolean;
+}
+
+const ScorePanel: React.FC<ScorePanelProps> = ({
+  level,
+  maxLevel,
+  timeLeft,
+  maxTime,
+  matchedPairs,
+  totalPairs,
+  bestScore,
+  onRestart,
+  onBackdoor,
+  onFAQ,
+  timerFrozen,
+  boardFrozen,
+}) => {
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const timePercent = (timeLeft / maxTime) * 100;
+  const isTimeLow = timeLeft <= 15;
+
+  return (
+    <div className="bg-indigo-900/80 backdrop-blur-sm rounded-xl shadow-lg px-4 py-2 border border-indigo-400/30">
+      <div className="flex items-center justify-between">
+        {/* Left: Title */}
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-300 to-purple-300 bg-clip-text text-transparent whitespace-nowrap">
+          🧠 Вспомнить всё
+        </h1>
+        {/* Center: Stats */}
+        <div className="flex items-center gap-6">
+          <div className="text-center min-w-[60px]">
+            <div className="text-xs text-indigo-300 uppercase">Уровень</div>
+            <div className="text-2xl font-bold text-purple-300">{level}/{maxLevel}</div>
+          </div>
+          <div className="text-center min-w-[70px]">
+            <div className="text-xs text-indigo-300 uppercase">
+              {timerFrozen ? '❄️ Заморожено' : boardFrozen ? '🧊 Заморожено!' : 'Время'}
+            </div>
+            <div className={`text-4xl font-bold font-mono ${boardFrozen ? 'text-blue-300' : timerFrozen ? 'text-cyan-300' : isTimeLow ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+              {formatTime(timeLeft)}
+            </div>
+            <div className="w-24 h-2 bg-indigo-700 rounded-full mt-1 mx-auto overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-1000 ${isTimeLow ? 'bg-red-500' : timerFrozen ? 'bg-cyan-400' : 'bg-indigo-400'}`} style={{ width: `${timePercent}%` }} />
+            </div>
+          </div>
+          <div className="text-center min-w-[50px]">
+            <div className="text-xs text-indigo-300 uppercase">Пары</div>
+            <div className="text-2xl font-bold text-green-300">{matchedPairs}/{totalPairs}</div>
+          </div>
+        </div>
+        {/* Right: Record + Restart */}
+        <div className="flex items-center gap-3">
+          <div
+            className="text-center bg-yellow-500/20 px-3 py-1 rounded-lg border border-yellow-400/40 cursor-pointer select-none min-w-[50px]"
+            onClick={onBackdoor}
+          >
+            <div className="text-xs text-yellow-300 uppercase">Рекорд</div>
+            <div className="text-xl font-bold text-yellow-300">{bestScore}</div>
+          </div>
+          <button
+            onClick={onFAQ}
+            className="text-center bg-cyan-500/20 px-3 py-1 rounded-lg border border-cyan-400/40 cursor-pointer select-none min-w-[50px] hover:scale-105 transition-all active:scale-95"
+          >
+            <div className="text-xs text-cyan-300 uppercase">FAQ</div>
+            <div className="text-xl font-bold text-cyan-300">❓</div>
+          </button>
+          <button
+            onClick={onRestart}
+            className="text-center bg-indigo-500/20 px-3 py-1 rounded-lg border border-indigo-400/40 cursor-pointer select-none min-w-[50px] hover:scale-105 transition-all active:scale-95"
+          >
+            <div className="text-xs text-indigo-300 uppercase">Заново</div>
+            <div className="text-xl font-bold text-indigo-300">🔄</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ScorePanel;
