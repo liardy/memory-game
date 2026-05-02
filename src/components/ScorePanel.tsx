@@ -25,9 +25,7 @@ interface ScorePanelProps {
   maxLevel: number;
   timeLeft: number;
   maxTime: number;
-  matchedPairs: number;
-  totalPairs: number;
-  bestScore: number;
+  score: number;
   onRestart: () => void;
   onBackdoor: () => void;
   onFAQ: () => void;
@@ -40,9 +38,7 @@ const ScorePanel: React.FC<ScorePanelProps> = ({
   maxLevel,
   timeLeft,
   maxTime,
-  matchedPairs,
-  totalPairs,
-  bestScore,
+  score,
   onRestart,
   onBackdoor,
   onFAQ,
@@ -83,8 +79,8 @@ const ScorePanel: React.FC<ScorePanelProps> = ({
             </div>
           </div>
           <div className="text-center min-w-[50px]">
-            <div className="text-xs text-indigo-300 uppercase">Пары</div>
-            <div className="text-2xl font-bold text-green-300">{matchedPairs}/{totalPairs}</div>
+            <div className="text-xs text-indigo-300 uppercase">Очки</div>
+            <div className="text-2xl font-bold text-green-300">{score}</div>
           </div>
         </div>
         {/* Right: Record + Restart */}
@@ -94,7 +90,7 @@ const ScorePanel: React.FC<ScorePanelProps> = ({
             onClick={onBackdoor}
           >
             <div className="text-xs text-yellow-300 uppercase">Рекорд</div>
-            <div className="text-xl font-bold text-yellow-300">{bestScore}</div>
+            <div className="text-xl font-bold text-yellow-300">{score}</div>
           </div>
           <button
             onClick={onFAQ}

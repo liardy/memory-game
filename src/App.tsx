@@ -48,13 +48,24 @@ const LEVELS: LevelConfig[] = [
 
 const MAX_LEVEL = LEVELS.length;
 
-// Bonus types pool
+// Bonus types — 16 unique bonuses
 const BONUS_TYPES: Bonus[] = [
-  { id: 'ufo', emoji: '🛸', name: 'НЛО', description: 'Подсветит случайную пару на 2 секунды', count: 0 },
-  { id: 'moon', emoji: '🌙', name: 'Луна', description: '+15 секунд к таймеру', count: 0 },
-  { id: 'comet', emoji: '☄️', name: 'Комета', description: '+10 секунд к таймеру', count: 0 },
-  { id: 'star', emoji: '🌟', name: 'Звезда', description: 'Замораживает таймер на 10 секунд', count: 0 },
-  { id: 'planet', emoji: '🪐', name: 'Планета', description: 'Автоматически находит одну пару', count: 0 },
+  { id: 'timer10', emoji: '⏳', name: 'Песочные часы', description: '+10 секунд к таймеру', count: 0 },
+  { id: 'sticky5', emoji: '📌', name: 'Прилипала', description: '5 сек карточки не закрываются', count: 0 },
+  { id: 'xray', emoji: '�️', name: 'Рентген', description: 'На 0.5 сек показывает все карточки', count: 0 },
+  { id: 'autoshield', emoji: '🛡️', name: 'Автозащита', description: 'При таймере 0:00 добавит 10 сек', count: 0 },
+  { id: 'anchor', emoji: '⚓', name: 'Якорь', description: 'Следующая карта не перемещается', count: 0 },
+  { id: 'autopair', emoji: '🪐', name: 'Планета', description: 'Открывает случайную пару', count: 0 },
+  { id: 'freeze', emoji: '❄️', name: 'Заморозка', description: '10 сек: таймер и всё заморожено', count: 0 },
+  { id: 'superpos', emoji: '🔮', name: 'Суперпозиция', description: 'Следующая карта остаётся открытой', count: 0 },
+  { id: 'microblast', emoji: '💥', name: 'Микровзрыв', description: 'Открывает карту + 4 соседних', count: 0 },
+  { id: 'canceltrap', emoji: '🚫', name: 'Анти-ловушка', description: 'Отменяет текущую/следующую ловушку', count: 0 },
+  { id: 'trapglow', emoji: '🔦', name: 'Детектор', description: 'На 0.5 сек подсвечивает ловушки', count: 0 },
+  { id: 'silhouettes', emoji: '🎭', name: 'Силуэты', description: 'На 3 сек показывает силуэты всех карт', count: 0 },
+  { id: 'sort', emoji: '📊', name: 'Сортировка', description: 'Собранные пары перемещаются вверх', count: 0 },
+  { id: 'show3pairs', emoji: '💡', name: 'Подсказка', description: 'На 1 сек показывает 3 случайные пары', count: 0 },
+  { id: 'pause', emoji: '⏸️', name: 'Пауза', description: 'Останавливает игру, чтобы подумать', count: 0 },
+  { id: 'doublepoints', emoji: '✨', name: 'Двойные очки', description: '10 сек: удваивает очки за пары', count: 0 },
 ];
 
 // Trap types
@@ -76,6 +87,14 @@ interface RoundModifiers {
   fastOpen: boolean;
   singleCardMode: boolean;
   ghostMode: boolean;
+  doublePoints: boolean;
+  anchorNext: boolean;
+  superposNext: boolean;
+  cancelTrapNext: boolean;
+  stickyOpen: boolean;
+  autoshieldActive: boolean;
+  microblastNext: boolean;
+  paused: boolean;
 }
 
 const DEFAULT_MODIFIERS: RoundModifiers = {
@@ -88,6 +107,14 @@ const DEFAULT_MODIFIERS: RoundModifiers = {
   fastOpen: false,
   singleCardMode: false,
   ghostMode: false,
+  doublePoints: false,
+  anchorNext: false,
+  superposNext: false,
+  cancelTrapNext: false,
+  stickyOpen: false,
+  autoshieldActive: false,
+  microblastNext: false,
+  paused: false,
 };
 
 interface TrapContext {
@@ -260,7 +287,7 @@ const TRAP_BLOCK_3: TrapDef[] = [
 const TRAP_BLOCK_4: TrapDef[] = [
   {
     id: 'death', name: 'Смерть', emoji: '☠️',
-    description: 'Мгновенный проигрыш! (Если не помечена)',
+    description: 'Мгновенный проигрыш! (Если не помечана)',
     apply: ({ setGameOver, setIsActive, showTrapMessage }) => {
       showTrapMessage('☠️ Смерть! Ловушка не была помечена — проигрыш!');
       setGameOver(true);
@@ -336,10 +363,11 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
-// Setup level: pick emojis, assign bonuses & multiple traps
+// Setup level: pick emojis, assign bonuses to ALL pairs & traps to some non-bonus ones
 function setupLevel(level: number): {
   cards: GameCard[];
   bonusMap: Record<string, Bonus>;
+  bonusOrder: string[]; // ordered emoji list for "top bonus lost" mechanic
   trapEmojis: string[];
   trapDefs: TrapDef[];
 } {
@@ -353,19 +381,18 @@ function setupLevel(level: number): {
     ? Array(pairCount).fill('8️⃣')
     : shuffleArray(ALL_EMOJIS).slice(0, pairCount);
 
-  // Pick bonus emojis
-  const bonusEmojis = shuffleArray([...selectedEmojis]).slice(0, config.bonusCount);
+  // Assign a bonus to every pair — shuffle bonus types and assign in order
   const shuffledBonusTypes = shuffleArray([...BONUS_TYPES]);
-
   const bonusMap: Record<string, Bonus> = {};
-  bonusEmojis.forEach((emoji, i) => {
+  const bonusOrder: string[] = [];
+  selectedEmojis.forEach((emoji, i) => {
     const bonusType = shuffledBonusTypes[i % shuffledBonusTypes.length];
     bonusMap[emoji] = { ...bonusType, count: 0 };
+    bonusOrder.push(emoji);
   });
 
-  // Pick trap emojis (not overlapping with bonuses)
-  const nonBonusEmojis = selectedEmojis.filter(e => !bonusMap[e]);
-  const trapEmojis = shuffleArray(nonBonusEmojis).slice(0, config.trapCount);
+  // Pick trap emojis (can overlap with bonuses now — traps are separate mechanic)
+  const trapEmojis = shuffleArray([...selectedEmojis]).slice(0, config.trapCount);
 
   // Assign trap types based on level blocks
   // 1-4: 1 from block 1
@@ -389,7 +416,7 @@ function setupLevel(level: number): {
     { id: index * 2 + 1, emoji, isFlipped: false, isMatched: false, isWrong: false, isHinted: false, contentHidden: false, colorIndex: isColorMatch ? index : undefined },
   ]);
 
-  return { cards: shuffleArray(cards), bonusMap, trapEmojis, trapDefs };
+  return { cards: shuffleArray(cards), bonusMap, bonusOrder, trapEmojis, trapDefs };
 }
 
 function App() {
@@ -404,6 +431,14 @@ function App() {
   const [boardFrozen, setBoardFrozen] = useState(false);
   const [bonuses, setBonuses] = useState<Bonus[]>([]);
   const [bonusMap, setBonusMap] = useState<Record<string, Bonus>>({});
+  const [bonusOrder, setBonusOrder] = useState<string[]>([]); // ordered emojis for "top bonus lost"
+  void bonusOrder;
+  const [availableBonuses, setAvailableBonuses] = useState<string[]>([]); // emojis still available to collect
+  const [trapsTriggered, setTrapsTriggered] = useState(0); // count of traps triggered this round
+  const [bonusesCollected, setBonusesCollected] = useState(0); // count of bonuses collected this round
+  const [score, setScore] = useState(0); // total score across rounds
+  const [showNameEntry, setShowNameEntry] = useState(false);
+  const [playerName, setPlayerName] = useState('');
   const [trapEmojis, setTrapEmojis] = useState<string[]>([]);
   const [trapDefs, setTrapDefs] = useState<TrapDef[]>([]);
   const [markedTraps, setMarkedTraps] = useState<Set<number>>(new Set());
@@ -414,10 +449,6 @@ function App() {
   const [cardsOpenedInPhase, setCardsOpenedInPhase] = useState(0); // level 12: count opens per phase
   const [failCounter, setFailCounter] = useState(0); // level 15: consecutive fails
   const failCounterRef = useRef(0);
-  const [bestScore, setBestScore] = useState(() => {
-    const saved = localStorage.getItem('memoryGameBestScore');
-    return saved ? parseInt(saved, 10) : 0;
-  });
   const [confetti, setConfetti] = useState<Array<{ id: number; x: number; y: number; color: string }>>([]);
   const [bonusMessage, setBonusMessage] = useState<string>('');
   const [trapMessage, setTrapMessage] = useState<string>('');
@@ -441,8 +472,12 @@ function App() {
     const config = LEVELS[Math.min(lvl - 1, LEVELS.length - 1)];
     setCards(setup.cards);
     setBonusMap(setup.bonusMap);
+    setBonusOrder(setup.bonusOrder);
+    setAvailableBonuses([...setup.bonusOrder]);
     setTrapEmojis(setup.trapEmojis);
     setTrapDefs(setup.trapDefs);
+    setTrapsTriggered(0);
+    setBonusesCollected(0);
     setMarkedTraps(new Set());
     setRoundModifiers({ ...DEFAULT_MODIFIERS });
     setFlippedCards([]);
@@ -493,6 +528,11 @@ function App() {
       interval = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
+            if (roundModifiers.autoshieldActive) {
+              setRoundModifiers(rm => ({ ...rm, autoshieldActive: false }));
+              showBonusMsg('🛡️ Автозащита! +10 секунд!');
+              return prev + 10;
+            }
             setGameOver(true);
             setIsActive(false);
             return 0;
@@ -540,12 +580,13 @@ function App() {
   }, [cards, gameWon, gameOver, trapEmojis, trapDefs, markedTraps, levelCompleting]);
 
   const completeLevel = () => {
+    // Calculate round score: remaining seconds × (bonuses - traps), minimum multiplier 1
+    const multiplier = Math.max(1, bonusesCollected - trapsTriggered);
+    const roundScore = timeLeft * multiplier * (roundModifiers.doublePoints ? 2 : 1);
+    setScore(prev => prev + roundScore);
+
     if (level >= MAX_LEVEL) {
       setGameWon(true);
-      if (bestScore === 0 || timeLeft > bestScore) {
-        setBestScore(timeLeft);
-        localStorage.setItem('memoryGameBestScore', timeLeft.toString());
-      }
       const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500', '#ff1493'];
       setConfetti(Array.from({ length: 100 }, (_, i) => ({
         id: i, x: Math.random() * 100, y: -10,
@@ -616,7 +657,42 @@ function App() {
       );
 
       switch (bonusId) {
-        case 'ufo': {
+        case 'timer10': {
+          setTimeLeft(prev => prev + 10);
+          showBonusMsg('⏳ +10 секунд!');
+          break;
+        }
+        case 'sticky5': {
+          setRoundModifiers(prev => ({ ...prev, stickyOpen: true }));
+          showBonusMsg('📌 Прилипала! 5 сек карточки не закрываются!');
+          setTimeout(() => {
+            setRoundModifiers(prev => ({ ...prev, stickyOpen: false }));
+            // Close non-matched flipped cards after sticky ends
+            setCards(prev => prev.map(c => (!c.isMatched && c.isFlipped) ? { ...c, isFlipped: false } : c));
+            setFlippedCards([]);
+          }, 5000);
+          break;
+        }
+        case 'xray': {
+          setCards(prev => prev.map(c => ({ ...c, isFlipped: true })));
+          showBonusMsg('👁️ Рентген! Все карточки открыты на 0.5 сек!');
+          setTimeout(() => {
+            setCards(prev => prev.map(c => (!c.isMatched) ? { ...c, isFlipped: false } : c));
+            setFlippedCards([]);
+          }, 500);
+          break;
+        }
+        case 'autoshield': {
+          setRoundModifiers(prev => ({ ...prev, autoshieldActive: true }));
+          showBonusMsg('🛡️ Автозащита активирована! Сработает при 0:00');
+          break;
+        }
+        case 'anchor': {
+          setRoundModifiers(prev => ({ ...prev, anchorNext: true }));
+          showBonusMsg('⚓ Якорь! Следующая карта не будет перемещена!');
+          break;
+        }
+        case 'autopair': {
           setCards(prevCards => {
             const unmatched = prevCards.map((card, i) => ({ card, i }))
               .filter(c => !c.card.isMatched && !c.card.isFlipped);
@@ -628,41 +704,76 @@ function App() {
             });
             const pairEmojis = Object.entries(emojiGroups).filter(([, indices]) => indices.length >= 2);
             if (pairEmojis.length === 0) return prevCards;
-            const [, indices] = pairEmojis[Math.floor(Math.random() * pairEmojis.length)];
-            const [idx1, idx2] = indices.slice(0, 2);
-            showBonusMsg(`🛸 НЛО подсветило пару!`);
-            const newCards = prevCards.map((card, i) =>
-              i === idx1 || i === idx2 ? { ...card, isHinted: true } : card
+            const [emoji, indices] = pairEmojis[Math.floor(Math.random() * pairEmojis.length)];
+            showBonusMsg(`🪐 Планета нашла пару: ${emoji}!`);
+            return prevCards.map((card, i) =>
+              indices.includes(i) ? { ...card, isMatched: true, isFlipped: true } : card
             );
-            setTimeout(() => {
-              setCards(prev => prev.map(card => ({ ...card, isHinted: false })));
-            }, 2000);
-            return newCards;
           });
           break;
         }
-        case 'moon': {
-          setTimeLeft(prev => prev + 15);
-          showBonusMsg('🌙 Луна добавила +15 секунд!');
-          break;
-        }
-        case 'comet': {
-          setTimeLeft(prev => prev + 10);
-          showBonusMsg('☄️ Комета добавила +10 секунд!');
-          break;
-        }
-        case 'star': {
+        case 'freeze': {
           setTimerFrozen(true);
-          showBonusMsg('🌟 Звезда заморозила таймер на 10 секунд!');
+          setBoardFrozen(true);
+          showBonusMsg('❄️ Заморозка! Всё заморожено на 10 сек!');
           if (freezeTimerRef.current) clearTimeout(freezeTimerRef.current);
-          freezeTimerRef.current = setTimeout(() => setTimerFrozen(false), 10000);
+          freezeTimerRef.current = setTimeout(() => {
+            setTimerFrozen(false);
+            setBoardFrozen(false);
+          }, 10000);
           break;
         }
-        case 'planet': {
+        case 'superpos': {
+          setRoundModifiers(prev => ({ ...prev, superposNext: true }));
+          showBonusMsg('🔮 Суперпозиция! Следующая карта останется открытой!');
+          break;
+        }
+        case 'microblast': {
+          // Will be handled on next card click via roundModifiers
+          setRoundModifiers(prev => ({ ...prev, microblastNext: true }));
+          showBonusMsg('💥 Микровзрыв! Следующая карта откроется с соседями!');
+          break;
+        }
+        case 'canceltrap': {
+          setRoundModifiers(prev => ({ ...prev, cancelTrapNext: true }));
+          showBonusMsg('🚫 Анти-ловушка! Следующая ловушка будет отменена!');
+          break;
+        }
+        case 'trapglow': {
+          // Highlight trap cards for 0.5s
+          setCards(prev => prev.map((c) =>
+            trapEmojis.includes(c.emoji) && !c.isMatched ? { ...c, isHinted: true } : c
+          ));
+          showBonusMsg('🔦 Детектор! Ловушки подсвечены на 0.5 сек!');
+          setTimeout(() => {
+            setCards(prev => prev.map(c => ({ ...c, isHinted: false })));
+          }, 500);
+          break;
+        }
+        case 'silhouettes': {
+          setRoundModifiers(prev => ({ ...prev, silhouetteOpen: true }));
+          showBonusMsg('🎭 Силуэты! Все рисунки видны на 3 сек!');
+          setCards(prev => prev.map(c => (!c.isMatched && !c.isFlipped) ? { ...c, isFlipped: true, contentHidden: true } : c));
+          setTimeout(() => {
+            setCards(prev => prev.map(c => (!c.isMatched && c.contentHidden) ? { ...c, isFlipped: false, contentHidden: false } : c));
+            setRoundModifiers(prev => ({ ...prev, silhouetteOpen: false }));
+            setFlippedCards([]);
+          }, 3000);
+          break;
+        }
+        case 'sort': {
+          setCards(prev => {
+            const matched = prev.filter(c => c.isMatched);
+            const unmatched = prev.filter(c => !c.isMatched);
+            return [...matched, ...unmatched];
+          });
+          showBonusMsg('📊 Сортировка! Собранные пары перемещены вверх!');
+          break;
+        }
+        case 'show3pairs': {
           setCards(prevCards => {
             const unmatched = prevCards.map((card, i) => ({ card, i }))
-              .filter(c => !c.card.isMatched);
-            if (unmatched.length < 2) return prevCards;
+              .filter(c => !c.card.isMatched && !c.card.isFlipped);
             const emojiGroups: Record<string, number[]> = {};
             unmatched.forEach(c => {
               if (!emojiGroups[c.card.emoji]) emojiGroups[c.card.emoji] = [];
@@ -670,26 +781,94 @@ function App() {
             });
             const pairEmojis = Object.entries(emojiGroups).filter(([, indices]) => indices.length >= 2);
             if (pairEmojis.length === 0) return prevCards;
-            const [emoji, indices] = pairEmojis[Math.floor(Math.random() * pairEmojis.length)];
-            showBonusMsg(`🪐 Планета нашла пару: ${emoji}!`);
-            return prevCards.map((card, i) =>
-              indices.includes(i) ? { ...card, isMatched: true, isFlipped: true, contentHidden: false } : card
+            const chosen = shuffleArray(pairEmojis).slice(0, 3);
+            const revealIndices = chosen.flatMap(([, indices]) => indices.slice(0, 2));
+            showBonusMsg('💡 Подсказка! 3 пары показаны на 1 сек!');
+            const newCards = prevCards.map((card, i) =>
+              revealIndices.includes(i) ? { ...card, isHinted: true } : card
             );
+            setTimeout(() => {
+              setCards(prev => prev.map(card => ({ ...card, isHinted: false })));
+            }, 1000);
+            return newCards;
           });
+          break;
+        }
+        case 'pause': {
+          setTimerFrozen(true);
+          setBoardFrozen(true);
+          showBonusMsg('⏸️ Пауза! Нажмите любую карту чтобы продолжить');
+          // Will be unpaused on next card click
+          setRoundModifiers(prev => ({ ...prev, paused: true }));
+          break;
+        }
+        case 'doublepoints': {
+          setRoundModifiers(prev => ({ ...prev, doublePoints: true }));
+          showBonusMsg('✨ Двойные очки! 10 сек удвоения!');
+          setTimeout(() => {
+            setRoundModifiers(prev => ({ ...prev, doublePoints: false }));
+          }, 10000);
           break;
         }
       }
       return newBonuses;
     });
-  }, []);
+  }, [trapEmojis, cards, showBonusMsg]);
 
   const handleCardClick = useCallback(
     (index: number) => {
+      // Pause: unpause on any click
+      if (roundModifiers.paused) {
+        setRoundModifiers(prev => ({ ...prev, paused: false }));
+        setTimerFrozen(false);
+        setBoardFrozen(false);
+        return;
+      }
       if (gameOver || gameWon || boardFrozen) return;
       if (roundModifiers.singleCardMode && flippedCards.length >= 1) return;
       if (!isActive) setIsActive(true);
       if (flippedCards.length === 2) return;
       if (cards[index].isFlipped || cards[index].isMatched || cards[index].isHinted) return;
+
+      // Microblast: open this card + 4 neighbors, then close non-matched
+      if (roundModifiers.microblastNext) {
+        setRoundModifiers(prev => ({ ...prev, microblastNext: false }));
+        const cols = cards.length > 14 ? 6 : 4;
+        const neighbors = [index - cols, index + cols, index - 1, index + 1].filter(n =>
+          n >= 0 && n < cards.length && !cards[n].isFlipped && !cards[n].isMatched &&
+          !(index % cols === 0 && n === index - 1) && !(index % cols === cols - 1 && n === index + 1)
+        );
+        const allIndices = [index, ...neighbors];
+        setCards(prev => prev.map((c, i) => allIndices.includes(i) ? { ...c, isFlipped: true } : c));
+        setFlippedCards([index]);
+        // Check for matches among opened cards
+        setTimeout(() => {
+          setCards(prev => {
+            const opened = allIndices.filter(i => prev[i].isFlipped && !prev[i].isMatched);
+            const emojiGroups: Record<string, number[]> = {};
+            opened.forEach(i => {
+              if (!emojiGroups[prev[i].emoji]) emojiGroups[prev[i].emoji] = [];
+              emojiGroups[prev[i].emoji].push(i);
+            });
+            const matchedIndices = new Set<number>();
+            Object.values(emojiGroups).forEach(indices => {
+              if (indices.length >= 2) {
+                matchedIndices.add(indices[0]);
+                matchedIndices.add(indices[1]);
+              }
+            });
+            return prev.map((c, i) => {
+              if (allIndices.includes(i)) {
+                if (matchedIndices.has(i)) return { ...c, isMatched: true };
+                return { ...c, isFlipped: false };
+              }
+              return c;
+            });
+          });
+          setFlippedCards([]);
+        }, 1000);
+        return;
+      }
 
       // Level 12: sections — block clicks in closed sections
       if (roundCondition?.id === 'sections') {
@@ -789,7 +968,7 @@ function App() {
               );
 
               // Level 9: jumpPair — matched pair jumps one cell in random direction
-              if (roundCondition?.id === 'jumpPair') {
+              if (roundCondition?.id === 'jumpPair' && !roundModifiers.anchorNext) {
                 const directions = [
                   { dr: -1, dc: 0 }, // up
                   { dr: 1, dc: 0 },  // down
@@ -850,9 +1029,8 @@ function App() {
               }, 15000);
             }
 
-            // Check if it gives a bonus (not a trap)
+            // Check if it's a trap pair (traps are separate from bonuses now)
             if (trapEmojis.includes(matchedEmoji)) {
-              // It's a trap pair! Check if both cards were marked
               const trapIdx = trapEmojis.indexOf(matchedEmoji);
               const trapCardIndices = cards
                 .map((c, i) => ({ c, i }))
@@ -860,12 +1038,14 @@ function App() {
                 .map(x => x.i);
               const bothMarked = trapCardIndices.every(idx => markedTraps.has(idx));
               if (bothMarked) {
-                // Trap neutralized by marking!
                 showBonusMsg(`🛡️ Ловушка ${matchedEmoji} нейтрализована пометкой!`);
+              } else if (roundModifiers.cancelTrapNext) {
+                setRoundModifiers(prev => ({ ...prev, cancelTrapNext: false }));
+                showBonusMsg(`🚫 Анти-ловушка отменила ловушку ${matchedEmoji}!`);
               } else {
-                // Trap fires!
                 const trapDef = trapDefs[trapIdx];
                 if (trapDef) {
+                  setTrapsTriggered(prev => prev + 1);
                   showTrapMsg(`⚠️ Ловушка ${matchedEmoji}! ${trapDef.emoji} ${trapDef.name}: ${trapDef.description}`);
                   trapDef.apply({
                     setCards,
@@ -881,8 +1061,20 @@ function App() {
                   });
                 }
               }
-            } else if (bonusMap[matchedEmoji]) {
+            }
+
+            // Bonus mechanic: every pair has a bonus
+            if (availableBonuses.includes(matchedEmoji)) {
+              // This pair's bonus is still available — collect it!
               grantBonus(matchedEmoji);
+              setAvailableBonuses(prev => prev.filter(e => e !== matchedEmoji));
+              setBonusesCollected(prev => prev + 1);
+            } else if (availableBonuses.length > 0) {
+              // This pair's bonus was already collected/lost — lose the top available bonus
+              const lostEmoji = availableBonuses[0];
+              const lostBonus = bonusMap[lostEmoji];
+              setAvailableBonuses(prev => prev.slice(1));
+              showBonusMsg(`❌ Бонус ${lostBonus?.emoji || ''} ${lostBonus?.name || ''} потерян!`);
             }
 
             // If hideOpenCards is active, hide matched cards' content after showing briefly
@@ -897,6 +1089,12 @@ function App() {
             }
           }, matchDelay);
 
+          // Reset anchorNext after match
+          if (roundModifiers.anchorNext) {
+            setRoundModifiers(prev => ({ ...prev, anchorNext: false }));
+            showBonusMsg('⚓ Якорь! Карточка не перемещена!');
+          }
+
           // Reset fail counter on successful match
           failCounterRef.current = 0;
           setFailCounter(0);
@@ -906,21 +1104,43 @@ function App() {
           failCounterRef.current = newFailCount;
           setFailCounter(newFailCount);
 
+          // StickyOpen: cards stay open (handled by bonus timeout)
+          if (roundModifiers.stickyOpen) {
+            setFlippedCards([]);
+            // Cards will be closed when stickyOpen expires (5s timeout in handleUseBonus)
+            return;
+          }
+
+          // Superposition: first card stays open
+          const superposActive = roundModifiers.superposNext;
+          if (superposActive) {
+            setRoundModifiers(prev => ({ ...prev, superposNext: false }));
+            showBonusMsg('🔮 Суперпозиция! Карточка остаётся открытой!');
+          }
+
+          const wrongDelay = roundModifiers.slowOpen ? 1500 : roundModifiers.fastOpen ? 600 : 1000;
           setTimeout(() => {
             setCards((prev) =>
-              prev.map((card, i) =>
-                i === first || i === second ? { ...card, isWrong: true } : card
-              )
+              prev.map((card, i) => {
+                if (i === first || i === second) {
+                  if (superposActive && i === first) return card; // keep first card open
+                  return { ...card, isFlipped: false, isWrong: false };
+                }
+                return card;
+              })
             );
-          }, 100);
-          const wrongDelay = roundModifiers.slowOpen ? 1500 : roundModifiers.fastOpen ? 600 : 1000;
+            if (superposActive) {
+              setFlippedCards([first]);
+            } else {
+              setFlippedCards([]);
+            }
+          }, wrongDelay);
+          // ShiftLine handling after cards are closed
           let didShift = false;
           let shiftType = '';
           setTimeout(() => {
             setCards((prev) => {
-              let updated = prev.map((card, i) =>
-                i === first || i === second ? { ...card, isFlipped: false, isWrong: false } : card
-              );
+              let updated = prev;
 
               // Level 15: shiftLine — every 6 fails, shift a row/column at last card position
               if (roundCondition?.id === 'shiftLine' && newFailCount % 6 === 0) {
@@ -998,8 +1218,6 @@ function App() {
   }, [trapEmojis]);
 
   const config = LEVELS[Math.min(level - 1, LEVELS.length - 1)];
-  const matchedPairs = cards.length > 0 ? cards.filter((c) => c.isMatched).length / 2 : 0;
-  const totalPairs = config.pairs;
 
   // Calculate card size based on available space and card count
   const getCardSize = (): React.CSSProperties => {
@@ -1053,9 +1271,7 @@ function App() {
           maxLevel={MAX_LEVEL}
           timeLeft={timeLeft}
           maxTime={config.time}
-          matchedPairs={matchedPairs}
-          totalPairs={totalPairs}
-          bestScore={bestScore}
+          score={score}
           onRestart={() => setShowRestartConfirm(true)}
           onBackdoor={handleBackdoor}
           onFAQ={() => setShowFAQ(true)}
@@ -1069,37 +1285,31 @@ function App() {
           <div className="flex-1 flex flex-col items-end gap-1.5 overflow-y-auto py-1">
             <div className="text-sm text-green-300 uppercase font-bold w-full text-right">🎁 Бонусы</div>
             {(() => {
-              const bonusInfos = Object.entries(bonusMap).map(([emoji, bonus]) => ({ emoji, bonusType: bonus }));
-              const allBonusIds = new Set(bonusInfos.map(bi => bi.bonusType.id));
-              const previousBonuses = bonuses.filter(b => b.count > 0 && !allBonusIds.has(b.id));
+              // Available bonuses: not yet collected, shown as pending
+              const availableEntries = availableBonuses.map(emoji => ({ emoji, bonusType: bonusMap[emoji] })).filter(e => e.bonusType);
+              // Collected bonuses: have count > 0
+              const collectedBonuses = bonuses.filter(b => b.count > 0);
               return <>
-                {bonusInfos.map((info) => {
-                  const collected = bonuses.find(b => b.id === info.bonusType.id);
-                  const count = collected?.count || 0;
-                  return (
-                    <div key={info.emoji}
-                      onClick={count > 0 && !gameWon && !gameOver && !boardFrozen ? () => handleUseBonus(info.bonusType.id) : undefined}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-lg transition-all ${count > 0 ? 'border-green-400/30 bg-green-500/10 cursor-pointer hover:bg-green-500/20 hover:scale-105 active:scale-95' : 'border-green-400/15 bg-green-500/5 opacity-50 cursor-default'}`}
-                    >
-                      <span className="text-3xl">{info.bonusType.emoji}</span>
-                      <span className="text-sm text-green-400/70">{info.bonusType.description}</span>
-                      <span className={`px-2 py-1 font-bold rounded text-sm ${count > 0 ? 'bg-green-400 text-green-900' : 'bg-indigo-700 text-indigo-400'}`}>
-                        ×{count}
-                      </span>
-                    </div>
-                  );
-                })}
-                {previousBonuses.map((bonus) => (
+                {availableEntries.map((info) => (
+                  <div key={info.emoji}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-400/15 bg-green-500/5 text-lg opacity-60"
+                  >
+                    <span className="text-2xl">{info.bonusType.emoji}</span>
+                    <span className="text-xs text-green-400/50">{info.bonusType.name}</span>
+                    <span className="text-xs text-green-400/30">?</span>
+                  </div>
+                ))}
+                {collectedBonuses.map((bonus) => (
                   <div key={bonus.id}
                     onClick={!gameWon && !gameOver && !boardFrozen ? () => handleUseBonus(bonus.id) : undefined}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-400/30 bg-indigo-500/10 text-lg cursor-pointer hover:bg-indigo-500/20 hover:scale-105 active:scale-95 transition-all"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-400/30 bg-green-500/10 text-lg cursor-pointer hover:bg-green-500/20 hover:scale-105 active:scale-95 transition-all"
                   >
                     <span className="text-3xl">{bonus.emoji}</span>
-                    <span className="text-sm text-indigo-400/70">{bonus.description}</span>
+                    <span className="text-sm text-green-400/70">{bonus.description}</span>
                     <span className="px-2 py-1 font-bold rounded text-sm bg-green-400 text-green-900">×{bonus.count}</span>
                   </div>
                 ))}
-                {bonusInfos.length === 0 && previousBonuses.length === 0 && (
+                {availableEntries.length === 0 && collectedBonuses.length === 0 && (
                   <div className="text-sm text-green-400/40 italic">Нет бонусов</div>
                 )}
               </>;
@@ -1223,22 +1433,18 @@ function App() {
         {showFAQ && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
             <div className="bg-gradient-to-br from-cyan-700 to-indigo-800 rounded-3xl p-8 text-center shadow-2xl border border-cyan-300/30 max-w-lg mx-4 animate-bounceIn">
-              <div className="text-5xl mb-3">❓</div>
-              <h2 className="text-2xl font-bold mb-4 text-white">Как играть</h2>
-              <div className="text-cyan-100 text-sm text-left space-y-2 mb-4">
-                <p>🖱️ <strong className="text-white">ЛКМ</strong> — открыть карточку</p>
-                <p>🖱️ <strong className="text-white">ПКМ</strong> — пометить ловушку (если обе карточки пары помечены — ловушка нейтрализуется)</p>
-                <p>⏱️ Соберите все пары за отведённое время</p>
-                <p>🎁 <strong className="text-green-300">Бонусы</strong> — собирайте и используйте в нужный момент</p>
-                <p>⚠️ <strong className="text-red-300">Ловушки</strong> — помечайте ПКМ, чтобы избежать штрафа</p>
-              </div>
+              <h2 className="text-2xl font-bold text-white mb-4">❓ Как играть</h2>
+              <p>🖱️ <strong className="text-white">ЛКМ</strong> — открыть карточку</p>
+              <p>🖱️ <strong className="text-white">ПКМ</strong> — пометить ловушку (если обе карточки пары помечены — ловушка нейтрализуется)</p>
+              <p>⏱️ Соберите все пары за отведённое время</p>
+              <p>🎁 <strong className="text-green-300">Бонусы</strong> — каждая пара даёт бонус! Если открытая пара не совпадает с доступным бонусом, верхний бонус теряется</p>
+              <p>⚠️ <strong className="text-red-300">Ловушки</strong> — помечайте ПКМ, чтобы избежать штрафа</p>
+              <p>🏆 <strong className="text-yellow-300">Очки</strong> = оставшиеся секунды × (бонусы − ловушки)</p>
               {roundCondition && (
-                <>
-                  <div className="border-t border-cyan-400/30 pt-3 mb-3">
-                    <h3 className="text-lg font-bold text-cyan-200 mb-2">{roundCondition.emoji} Особенность раунда {level}</h3>
-                    <p className="text-cyan-100 text-sm">{roundCondition.description}</p>
-                  </div>
-                </>
+                <div className="border-t border-cyan-400/30 pt-3 mb-3">
+                  <h3 className="text-lg font-bold text-cyan-200 mb-2">{roundCondition.emoji} Особенность раунда {level}</h3>
+                  <p className="text-cyan-100 text-sm">{roundCondition.description}</p>
+                </div>
               )}
               <button
                 onClick={() => setShowFAQ(false)}
@@ -1299,11 +1505,51 @@ function App() {
               />
             ))}
             <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-8 text-center shadow-2xl border border-white/20 max-w-md mx-4 animate-bounceIn">
-              <div className="text-6xl mb-4">�</div>
+              <div className="text-6xl mb-4">🏆</div>
               <h2 className="text-3xl font-bold mb-2">Все уровни пройдены!</h2>
-              <p className="text-purple-200 mb-6">
+              <p className="text-purple-200 mb-2">
                 Ты прошёл все {MAX_LEVEL} уровней!
               </p>
+              <p className="text-yellow-300 text-2xl font-bold mb-4">
+                Итоговые очки: {score}
+              </p>
+              {!showNameEntry ? (
+                <button
+                  onClick={() => setShowNameEntry(true)}
+                  className="px-8 py-3 bg-yellow-500 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition-all active:scale-95 mb-3"
+                >
+                  Сохранить результат
+                </button>
+              ) : (
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    value={playerName}
+                    onChange={e => setPlayerName(e.target.value)}
+                    placeholder="Ваше имя"
+                    className="px-4 py-2 rounded-lg text-black text-center text-lg mb-2 w-48"
+                    maxLength={20}
+                    autoFocus
+                  />
+                  <br />
+                  <button
+                    onClick={() => {
+                      if (playerName.trim()) {
+                        const records = JSON.parse(localStorage.getItem('memoryGameRecords') || '[]');
+                        records.push({ name: playerName.trim(), score, date: new Date().toISOString() });
+                        records.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
+                        localStorage.setItem('memoryGameRecords', JSON.stringify(records.slice(0, 100)));
+                        setShowNameEntry(false);
+                        setPlayerName('');
+                      }
+                    }}
+                    className="px-6 py-2 bg-green-500 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition-all active:scale-95"
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              )}
+              <br />
               <button
                 onClick={handleRestart}
                 className="px-8 py-4 bg-white text-indigo-700 font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95"
@@ -1326,9 +1572,46 @@ function App() {
               <p className="text-red-300 mb-2">
                 Уровень: <span className="text-white font-bold">{level}</span>
               </p>
-              <p className="text-red-300 mb-6">
-                Найдено пар: <span className="text-white font-bold">{matchedPairs}/{totalPairs}</span>
+              <p className="text-yellow-300 mb-6">
+                Очки: <span className="text-white font-bold">{score}</span>
               </p>
+              {!showNameEntry ? (
+                <button
+                  onClick={() => setShowNameEntry(true)}
+                  className="px-8 py-4 bg-yellow-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95 mb-3"
+                >
+                  Сохранить результат
+                </button>
+              ) : (
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    value={playerName}
+                    onChange={e => setPlayerName(e.target.value)}
+                    placeholder="Ваше имя"
+                    className="px-4 py-2 rounded-lg text-black text-center text-lg mb-2 w-48"
+                    maxLength={20}
+                    autoFocus
+                  />
+                  <br />
+                  <button
+                    onClick={() => {
+                      if (playerName.trim()) {
+                        const records = JSON.parse(localStorage.getItem('memoryGameRecords') || '[]');
+                        records.push({ name: playerName.trim(), score, date: new Date().toISOString() });
+                        records.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
+                        localStorage.setItem('memoryGameRecords', JSON.stringify(records.slice(0, 100)));
+                        setShowNameEntry(false);
+                        setPlayerName('');
+                      }
+                    }}
+                    className="px-6 py-2 bg-green-500 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition-all active:scale-95"
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              )}
+              <br />
               <button
                 onClick={handleRestart}
                 className="px-8 py-4 bg-white text-red-700 font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95"
