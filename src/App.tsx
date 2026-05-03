@@ -460,6 +460,9 @@ function App() {
   const [trapDefs, setTrapDefs] = useState<TrapDef[]>([]);
   const [markedTraps, setMarkedTraps] = useState<Set<number>>(new Set());
   const [roundModifiers, setRoundModifiers] = useState<RoundModifiers>({ ...DEFAULT_MODIFIERS });
+  const roundModifiersRef = useRef<RoundModifiers>({ ...DEFAULT_MODIFIERS });
+  // Keep ref in sync with state to avoid stale closures
+  useEffect(() => { roundModifiersRef.current = roundModifiers; }, [roundModifiers]);
   const [roundCondition, setRoundCondition] = useState<RoundCondition | null>(null);
   const [showRoundCondition, setShowRoundCondition] = useState(false);
   const [sectionPhase, setSectionPhase] = useState(0); // level 12: 0=even open, 1=odd open
@@ -479,7 +482,6 @@ function App() {
   void backdoorClicks;
   const [showLevelSelect, setShowLevelSelect] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
-  const levelChangingRef = useRef(false);
   const [swappingIndices, setSwappingIndices] = useState<Set<number>>(new Set());
   const pendingSwapRef = useRef<(() => void) | null>(null);
   const [trapShiftCountdown, setTrapShiftCountdown] = useState<number | null>(null);
@@ -504,6 +506,7 @@ function App() {
     setTriggeredTrapIds(new Set());
     setMarkedTraps(new Set());
     setRoundModifiers({ ...DEFAULT_MODIFIERS });
+    roundModifiersRef.current = { ...DEFAULT_MODIFIERS };
     setFlippedCards([]);
     setTimeLeft(config.time);
     setIsActive(false);
@@ -559,8 +562,9 @@ function App() {
       interval = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
-            if (roundModifiers.autoshieldActive) {
+            if (roundModifiersRef.current.autoshieldActive) {
               setRoundModifiers(rm => ({ ...rm, autoshieldActive: false }));
+              roundModifiersRef.current = { ...roundModifiersRef.current, autoshieldActive: false };
               showBonusMsg('🛡️ Автозащита! +10 секунд!');
               return prev + 10;
             }
@@ -568,7 +572,7 @@ function App() {
             setIsActive(false);
             return 0;
           }
-          return timerFrozen ? prev : prev - roundModifiers.timerSpeed;
+          return timerFrozen ? prev : prev - roundModifiersRef.current.timerSpeed;
         });
       }, 1000);
     }
@@ -1155,8 +1159,11 @@ function App() {
                 console.log(`[TRAP NEUTRALIZED] pairId=${matchedPairId} — both cards marked`);
                 setDebugLogs(prev => [...prev.slice(-20), { text: `[TRAP NEUTRALIZED] ${matchedPairId} — both marked`, type: 'bonus' }]);
                 showBonusMsg(`🛡️ Ловушка нейтрализована пометкой!`);
-              } else if (roundModifiers.cancelTrapNext) {
+              } else if (roundModifiersRef.current.cancelTrapNext) {
                 setRoundModifiers(prev => ({ ...prev, cancelTrapNext: false }));
+                roundModifiersRef.current = { ...roundModifiersRef.current, cancelTrapNext: false };
+                console.log(`[TRAP CANCELLED] pairId=${matchedPairId} — cancelTrapNext was active`);
+                setDebugLogs(prev => [...prev.slice(-20), { text: `[TRAP CANCELLED] ${matchedPairId} — анти-ловушка!`, type: 'bonus' }]);
                 showBonusMsg(`🚫 Анти-ловушка отменила ловушку!`);
               } else {
                 const trapDef = trapDefs[trapIdx];
