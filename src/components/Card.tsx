@@ -124,19 +124,17 @@ const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onCon
 
         {/* Back of card (revealed state) */}
         <div
-          className={`absolute w-full h-full backface-hidden rotate-y-180 rounded-xl shadow-lg flex items-center justify-center border-2 ${isSilhouette && isContentHidden
-            ? 'bg-black/80 border-gray-700'
-            : colorBgClass
-              ? colorBgClass
-              : isHinted
-                ? 'bg-gradient-to-br from-cyan-300 to-blue-400 border-cyan-200'
-                : isMatched
-                  ? isTriggeredTrap
-                    ? 'bg-gradient-to-br from-red-400 to-red-500 border-red-300'
-                    : 'bg-gradient-to-br from-green-400 to-emerald-500 border-green-300'
-                  : isWrong
-                    ? 'bg-gradient-to-br from-red-400 to-red-500 border-red-300 animate-wrong'
-                    : 'bg-gradient-to-br from-yellow-100 to-orange-100 border-yellow-300'
+          className={`absolute w-full h-full backface-hidden rotate-y-180 rounded-xl shadow-lg flex items-center justify-center border-2 ${colorBgClass
+            ? colorBgClass
+            : isHinted
+              ? 'bg-gradient-to-br from-cyan-300 to-blue-400 border-cyan-200'
+              : isMatched
+                ? isTriggeredTrap
+                  ? 'bg-gradient-to-br from-red-400 to-red-500 border-red-300'
+                  : 'bg-gradient-to-br from-green-400 to-emerald-500 border-green-300'
+                : isWrong
+                  ? 'bg-gradient-to-br from-red-400 to-red-500 border-red-300 animate-wrong'
+                  : 'bg-gradient-to-br from-yellow-100 to-orange-100 border-yellow-300'
             }`}
           style={{
             fontSize: sizeStyle.fontSize,
@@ -147,7 +145,7 @@ const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onCon
           {isColorMode ? null : (
             <span style={{
               ...(isContentHidden && !isSilhouette ? { opacity: 0 } : {}),
-              ...(isSilhouette ? { filter: 'grayscale(1) brightness(0.3) contrast(3)' } : {}),
+              ...(isSilhouette ? { filter: 'brightness(0)' } : {}),
             }}>{emoji}</span>
           )}
 
