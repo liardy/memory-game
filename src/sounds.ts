@@ -161,7 +161,7 @@ const MUSIC_TRACKS = [
   '/music/tunetank-cyberpunk-futuristic-background-349787.mp3',
 ];
 
-const MUSIC_VOLUME = 0.15; // 50% of previous 0.3
+const MUSIC_VOLUME = 0.075;
 const FADE_DURATION = 1.5; // 1.5 second fade
 
 // Shared compressor for normalization
