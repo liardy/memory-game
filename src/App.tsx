@@ -1520,7 +1520,12 @@ function App() {
             if (didShift) {
               showBonusMsg(`↔️ Сдвиг! ${shiftType} сместился!`);
             }
-            setFlippedCards([]);
+            // Don't clear flippedCards if superpos keeps a card open
+            if (superposActive) {
+              setFlippedCards([first]);
+            } else {
+              setFlippedCards([]);
+            }
           }, wrongDelay);
         }
       }
