@@ -41,6 +41,26 @@ const EMOJI_BONUS_MAP: Record<string, Bonus> = {
   '⚡': { id: 'doublepoints', emoji: '✨', name: 'Двойные очки', description: '10 сек: удваивает очки за пары', count: 0 },
 };
 
+// Static mapping from bonus ID to card emoji (no randomization)
+const BONUS_ID_TO_EMOJI: Record<string, string> = {
+  'timer10': '🚀',
+  'sticky5': '🌟',
+  'autopair': '🪐',
+  'xray': '👽',
+  'autoshield': '🌙',
+  'anchor': '☄️',
+  'freeze': '🛸',
+  'superpos': '🌌',
+  'microblast': '🔮',
+  'canceltrap': '🎭',
+  'trapglow': '🦄',
+  'silhouettes': '🐉',
+  'sort': '🦋',
+  'show3pairs': '🌺',
+  'pause': '🍄',
+  'doublepoints': '⚡',
+};
+
 // Level definitions — 16 levels, gradual progression
 interface LevelConfig {
   pairs: number;
@@ -383,27 +403,34 @@ function setupLevel(level: number): {
   // Select unique pair IDs (always unique, used for bonus/trap/match identity)
   const pairIds = shuffleArray(ALL_EMOJIS).slice(0, pairCount);
 
-  // Display emoji: for level 8 show empty (color only), otherwise same as pairId
-  const displayEmojis = isColorMatch
-    ? Array(pairCount).fill('')
-    : [...pairIds];
-
-  // Assign bonuses to bonusCount pairs using fixed mapping (by pairId)
-  const bonusKeys = shuffleArray(Object.keys(EMOJI_BONUS_MAP));
-  const selectedBonuses = bonusKeys.slice(0, config.bonusCount);
+  // Assign bonuses to bonusCount pairs using static mapping (bonus ID -> emoji)
+  const bonusIds = Object.keys(BONUS_ID_TO_EMOJI);
+  const selectedBonuses = bonusIds.slice(0, config.bonusCount);
   const shuffledPairIds = shuffleArray([...pairIds]);
   const bonusPairIds: string[] = [];
   const bonusMap: Record<string, Bonus> = {};
   const bonusOrder: string[] = [];
-  selectedBonuses.forEach((bonusKey, i) => {
+  selectedBonuses.forEach((bonusId, i) => {
     const pairId = shuffledPairIds[i];
-    const fixedBonus = EMOJI_BONUS_MAP[bonusKey];
-    if (fixedBonus && pairId) {
-      bonusMap[pairId] = { ...fixedBonus, count: 0 };
+    const bonusDef = Object.values(EMOJI_BONUS_MAP).find(b => b.id === bonusId);
+    if (bonusDef && pairId) {
+      bonusMap[pairId] = { ...bonusDef, count: 0 };
       bonusOrder.push(pairId);
       bonusPairIds.push(pairId);
     }
   });
+
+  // Display emoji: for level 8 show empty (color only), otherwise use bonus emoji if pair is a bonus, otherwise use pairId
+  const displayEmojis = isColorMatch
+    ? Array(pairCount).fill('')
+    : pairIds.map(pairId => {
+      const bonusDef = bonusMap[pairId];
+      if (bonusDef) {
+        const bonusId = bonusDef.id;
+        return BONUS_ID_TO_EMOJI[bonusId] || pairId;
+      }
+      return pairId;
+    });
 
   // Pick trap pairIds (from non-bonus pairs) — level 8 has no traps
   const bonusPairIdSet = new Set(bonusPairIds);
