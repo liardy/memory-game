@@ -1593,7 +1593,6 @@ function App() {
                         isTriggeredTrap={triggeredTrapIds.has(card.pairId)}
                         isSwapping={swappingIndices.has(index)}
                         isAnchored={roundModifiers.anchorNext}
-                        isTrapCard={trapPairIds.includes(card.pairId)}
                       />
                     </div>
                   );
@@ -1627,7 +1626,6 @@ function App() {
                     isTriggeredTrap={triggeredTrapIds.has(card.pairId)}
                     isSwapping={swappingIndices.has(index)}
                     isAnchored={roundModifiers.anchorNext}
-                    isTrapCard={trapPairIds.includes(card.pairId)}
                     isSectionBlocked={(() => {
                       if (roundCondition?.id !== 'sections') return false;
                       const cols = cards.length > 14 ? 6 : 4;
@@ -1658,7 +1656,7 @@ function App() {
               const displayEmoji = cards.find(c => c.pairId === pairId)?.emoji || pairId;
               return (
                 <div key={pairId} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-lg ${isNeutralized ? 'border-green-400/30 bg-green-500/10' : isTriggered ? 'border-red-400/60 bg-red-500/30 shadow-lg shadow-red-500/30' : 'border-red-400/30 bg-red-500/10'}`}>
-                  <span className="text-3xl" style={{ filter: 'grayscale(1) brightness(0.15) contrast(3)' }}>{displayEmoji}</span>
+                  <span className="text-3xl border-2 border-red-500/70 rounded-md p-0.5" style={{ filter: 'grayscale(1) brightness(0.15) contrast(3)' }}>{displayEmoji}</span>
                   <span className="text-sm text-red-400/70">{def?.description || 'Штраф!'}</span>
                   {isNeutralized && <span className="text-base">🛡️</span>}
                   {isTriggered && !isNeutralized && <span className="text-base">🔥</span>}

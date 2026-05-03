@@ -25,7 +25,6 @@ interface CardProps {
   isTriggeredTrap?: boolean;
   isSwapping?: boolean;
   isAnchored?: boolean;
-  isTrapCard?: boolean;
 }
 
 // 5 different idle animation keyframes as inline styles
@@ -37,7 +36,7 @@ const IDLE_ANIMATIONS: React.CSSProperties[] = [
   { animationName: 'card-squish', animationDuration: '3.8s', animationTimingFunction: 'ease-in-out', animationIterationCount: 'infinite' },
 ];
 
-const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onContextMenu, disabled, isWrong, isHinted, isMarkedTrap, index, cardSize, isFloating, isSilhouette, isBlurred, isGhost, rotation, isSectionBlocked, colorIndex, isSlowOpen, isContentHidden, isColorMode, isTriggeredTrap, isSwapping, isAnchored, isTrapCard }) => {
+const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onContextMenu, disabled, isWrong, isHinted, isMarkedTrap, index, cardSize, isFloating, isSilhouette, isBlurred, isGhost, rotation, isSectionBlocked, colorIndex, isSlowOpen, isContentHidden, isColorMode, isTriggeredTrap, isSwapping, isAnchored }) => {
   const [sparkles, setSparkles] = useState<Array<{ id: number; x: number; y: number }>>([]);
 
   // Color palette for level 8 — strong contrasting colors
@@ -125,7 +124,7 @@ const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onCon
 
         {/* Back of card (revealed state) */}
         <div
-          className={`absolute w-full h-full backface-hidden rotate-y-180 rounded-xl shadow-lg flex items-center justify-center border-2 ${isSilhouette && isTrapCard ? 'border-red-500/80 ring-2 ring-red-500/50' : ''} ${colorBgClass
+          className={`absolute w-full h-full backface-hidden rotate-y-180 rounded-xl shadow-lg flex items-center justify-center border-2 ${colorBgClass
             ? colorBgClass
             : isHinted
               ? 'bg-gradient-to-br from-cyan-300 to-blue-400 border-cyan-200'
