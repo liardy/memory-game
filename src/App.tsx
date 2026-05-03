@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Card from './components/Card';
 import ScorePanel, { Bonus } from './components/ScorePanel';
-import SpaceBackground from './components/SpaceBackground';
+import CyberBackground from './components/CyberBackground';
 import { submitScore, getTopScores, LeaderboardEntry } from './leaderboard';
 import { playFlip, playMatch, playMismatch, playBonusCollect, playBonusUse, playBonusLost, playTrap, playLevelComplete, playGameOver, playGameWon, playTimerTick, playUIClick, startRoundMusic, stopRoundMusic } from './sounds';
 import './App.css';
@@ -1702,8 +1702,8 @@ function App() {
   };
 
   return (
-    <div className="h-screen space-bg text-white relative overflow-hidden flex flex-col">
-      <SpaceBackground />
+    <div className="h-screen text-white relative overflow-hidden flex flex-col">
+      <CyberBackground level={level} />
 
       <div className="flex flex-col h-full px-3 py-2 w-full mx-auto relative z-10">
         {/* Bonus/Trap message popups */}
