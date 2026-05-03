@@ -55,30 +55,19 @@ async function openLevelSelect(page: Page) {
   await page.waitForTimeout(500);
 }
 
-/** Select level N — click the button and ensure overlay closes */
+/** Select level N — click button and wait for overlay to close */
 async function selectLevel(page: Page, n: number) {
   const overlay = page.getByTestId('level-select-overlay');
   await expect(overlay).toBeVisible({ timeout: 5000 });
   const btn = page.getByTestId(`level-btn-${n}`);
   await expect(btn).toBeVisible({ timeout: 3000 });
 
-  // Scroll and click the level button
   await btn.scrollIntoViewIfNeeded();
   await btn.click();
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(2000); // Wait for setTimeout(0) to execute
 
-  // If overlay still visible, click on its backdrop to close
-  if (await overlay.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await overlay.click({ position: { x: 50, y: 50 } }); // Click on backdrop
-    await page.waitForTimeout(500);
-  }
-
-  // Final check - if still visible, use Escape
-  if (await overlay.isVisible({ timeout: 500 }).catch(() => false)) {
-    await overlay.focus();
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
-  }
+  // Verify overlay closed
+  await expect(overlay).not.toBeVisible({ timeout: 3000 });
 }
 
 async function goToLevel(page: Page, n: number) {

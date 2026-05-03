@@ -479,6 +479,7 @@ function App() {
   void backdoorClicks;
   const [showLevelSelect, setShowLevelSelect] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
+  const levelChangingRef = useRef(false);
   const [swappingIndices, setSwappingIndices] = useState<Set<number>>(new Set());
   const pendingSwapRef = useRef<(() => void) | null>(null);
   const [trapShiftCountdown, setTrapShiftCountdown] = useState<number | null>(null);
@@ -543,6 +544,13 @@ function App() {
     initLevel(1);
     setBonuses([]);
   }, []);
+
+  // Auto-close level selector when level changes (fixes React state batching issue)
+  useEffect(() => {
+    if (showLevelSelect) {
+      setShowLevelSelect(false);
+    }
+  }, [level]);
 
   // Countdown timer
   useEffect(() => {
@@ -1715,7 +1723,8 @@ function App() {
                       console.log(`[LEVEL SELECT] clicking level ${lvl}, closing overlay`);
                       setLevel(lvl);
                       initLevel(lvl);
-                      setShowLevelSelect(false);
+                      // Use setTimeout to bypass React state batching
+                      setTimeout(() => setShowLevelSelect(false), 0);
                     }}
                     className={`px-3 py-2 rounded-lg font-bold text-sm transition-all hover:scale-105 active:scale-95 ${lvl === level ? 'bg-yellow-400 text-yellow-900' : 'bg-indigo-500/60 text-white hover:bg-indigo-400/60'}`}
                   >
