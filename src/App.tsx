@@ -486,6 +486,20 @@ function App() {
   const pendingSwapRef = useRef<(() => void) | null>(null);
   const [trapShiftCountdown, setTrapShiftCountdown] = useState<number | null>(null);
   const [debugLogs, setDebugLogs] = useState<{ text: string; type: string }[]>([]);
+  const [showDebugLog, setShowDebugLog] = useState(false);
+
+  // Keyboard listener for F10 to toggle debug log
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F10') {
+        e.preventDefault();
+        setShowDebugLog(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const backdoorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const freezeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bonusMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1960,9 +1974,9 @@ function App() {
         )}
 
         {/* Debug log panel */}
-        {process.env.NODE_ENV === 'development' && (
+        {process.env.NODE_ENV === 'development' && showDebugLog && (
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/80 text-green-400 font-mono text-xs max-h-32 overflow-y-auto px-2 py-1 border-t border-green-500/30">
-            <div className="text-green-300 font-bold mb-1">🔍 Debug Log</div>
+            <div className="text-green-300 font-bold mb-1">🔍 Debug Log (F10 to toggle)</div>
             {debugLogs.map((log, i) => (
               <div key={i} className={log.type === 'trap' ? 'text-red-400' : log.type === 'bonus' ? 'text-yellow-300' : log.type === 'click' ? 'text-green-400' : 'text-blue-300'}>
                 {log.text}
