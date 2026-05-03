@@ -1524,7 +1524,7 @@ function App() {
               const collectedBonuses = bonuses.filter(b => b.count > 0);
               return <>
                 {availableEntries.length > 0 && (
-                  <div className="text-xs text-green-400/50 uppercase w-full text-right border-b border-green-400/20 pb-1 mb-1">Можно получить</div>
+                  <div className="text-xs text-green-300 uppercase w-full text-right border-b border-green-400/20 pb-1 mb-1">Можно получить</div>
                 )}
                 {availableEntries.map((info) => {
                   const displayEmoji = cards.find(c => c.pairId === info.pairId)?.emoji || info.pairId;
