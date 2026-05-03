@@ -162,46 +162,60 @@ const MUSIC_TRACKS = [
 ];
 
 const MUSIC_VOLUME = 0.15; // 50% of previous 0.3
-const FADE_DURATION = 1.0; // 1 second fade
+const FADE_DURATION = 1.5; // 1.5 second fade
 
-let currentAudio: HTMLAudioElement | null = null;
-let musicGainNode: GainNode | null = null;
-let musicSource: MediaElementAudioSourceNode | null = null;
+// Shared compressor for normalization
+let compressorNode: DynamicsCompressorNode | null = null;
 
-function getMusicGain(): GainNode {
-  const c = getCtx();
-  if (!musicGainNode) {
-    // Compressor to normalize loudness across tracks
-    const compressor = c.createDynamicsCompressor();
-    compressor.threshold.value = -20;
-    compressor.knee.value = 10;
-    compressor.ratio.value = 12;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.25;
-
-    musicGainNode = c.createGain();
-    musicGainNode.gain.value = MUSIC_VOLUME;
-
-    musicGainNode.connect(compressor);
-    compressor.connect(c.destination);
+function getCompressor(c: AudioContext): DynamicsCompressorNode {
+  if (!compressorNode) {
+    compressorNode = c.createDynamicsCompressor();
+    compressorNode.threshold.value = -20;
+    compressorNode.knee.value = 10;
+    compressorNode.ratio.value = 12;
+    compressorNode.attack.value = 0.003;
+    compressorNode.release.value = 0.25;
+    compressorNode.connect(c.destination);
   }
-  return musicGainNode;
+  return compressorNode;
 }
 
-function connectAudioToGain(audio: HTMLAudioElement) {
+interface MusicTrack {
+  audio: HTMLAudioElement;
+  source: MediaElementAudioSourceNode;
+  gain: GainNode;
+}
+
+let currentTrack: MusicTrack | null = null;
+let fadingOutTracks: MusicTrack[] = [];
+
+function createTrack(audio: HTMLAudioElement): MusicTrack | null {
   const c = getCtx();
-  // Disconnect previous source if any
-  if (musicSource) {
-    try { musicSource.disconnect(); } catch { /* already disconnected */ }
-  }
   try {
-    musicSource = c.createMediaElementSource(audio);
-    musicSource.connect(getMusicGain());
+    const source = c.createMediaElementSource(audio);
+    const gain = c.createGain();
+    source.connect(gain);
+    gain.connect(getCompressor(c));
+    return { audio, source, gain };
   } catch {
-    // MediaElementSource can only be created once per audio element
-    // If reused, just use volume fallback
+    // Fallback: can't create MediaElementSource
     audio.volume = MUSIC_VOLUME;
+    return null;
   }
+}
+
+function fadeOutTrack(track: MusicTrack) {
+  const c = getCtx();
+  track.gain.gain.setValueAtTime(track.gain.gain.value, c.currentTime);
+  track.gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + FADE_DURATION);
+  fadingOutTracks.push(track);
+  setTimeout(() => {
+    track.audio.pause();
+    track.audio.src = '';
+    try { track.source.disconnect(); } catch { /* ok */ }
+    try { track.gain.disconnect(); } catch { /* ok */ }
+    fadingOutTracks = fadingOutTracks.filter(t => t !== track);
+  }, FADE_DURATION * 1000 + 200);
 }
 
 export function startRoundMusic() {
@@ -209,41 +223,31 @@ export function startRoundMusic() {
   const audio = new Audio(track);
   audio.loop = true;
   audio.crossOrigin = 'anonymous';
-  connectAudioToGain(audio);
 
-  // Fade in
-  const gain = getMusicGain();
-  const c = getCtx();
-  gain.gain.setValueAtTime(0.001, c.currentTime);
-  gain.gain.exponentialRampToValueAtTime(MUSIC_VOLUME, c.currentTime + FADE_DURATION);
+  const trackObj = createTrack(audio);
+
+  // Fade out old track (keep playing during crossfade)
+  if (currentTrack) {
+    fadeOutTrack(currentTrack);
+    currentTrack = null;
+  }
+
+  if (trackObj) {
+    // Fade in new track via its own gain node
+    const c = getCtx();
+    trackObj.gain.gain.setValueAtTime(0.001, c.currentTime);
+    trackObj.gain.gain.exponentialRampToValueAtTime(MUSIC_VOLUME, c.currentTime + FADE_DURATION);
+    currentTrack = trackObj;
+  }
 
   audio.play().catch(() => {
     // Autoplay blocked — will play after first user interaction
   });
-  currentAudio = audio;
 }
 
 export function stopRoundMusic() {
-  if (!currentAudio) return;
-  const audio = currentAudio;
-  currentAudio = null;
-
-  // Fade out
-  const gain = musicGainNode;
-  const c = ctx;
-  if (gain && c) {
-    gain.gain.setValueAtTime(gain.gain.value, c.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + FADE_DURATION);
-    setTimeout(() => {
-      audio.pause();
-      audio.src = '';
-      if (musicSource) {
-        try { musicSource.disconnect(); } catch { /* ok */ }
-        musicSource = null;
-      }
-    }, FADE_DURATION * 1000 + 100);
-  } else {
-    audio.pause();
-    audio.src = '';
+  if (currentTrack) {
+    fadeOutTrack(currentTrack);
+    currentTrack = null;
   }
 }
