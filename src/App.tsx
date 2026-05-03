@@ -622,7 +622,6 @@ function App() {
     setCardsOpenedInPhase(0);
     setFailCounter(0);
     failCounterRef.current = 0;
-    startRoundMusic();
 
     // Check for special round condition
     const condition = ROUND_CONDITIONS.find(c => c.level === lvl) || null;
@@ -879,6 +878,7 @@ function App() {
         setShowLevelUp(false);
         setLevel(prev => prev + 1);
         initLevel(level + 1);
+        startRoundMusic();
       }, 2000);
     }
   };
@@ -1555,6 +1555,7 @@ function App() {
     stopRoundMusic();
     setLevel(1);
     initLevel(1);
+    startRoundMusic();
     setBonuses([]);
     setScore(0);
     setBonusesCollected(0);
@@ -2039,7 +2040,7 @@ function App() {
                 <p>🎲 С <strong className="text-white">8 по 16 раунд</strong> появляются сложные дополнительные условия!</p>
               </div>
               <button
-                onClick={() => setShowIntro(false)}
+                onClick={() => { startRoundMusic(); setShowIntro(false); }}
                 className="px-8 py-3 bg-white text-indigo-700 font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95 text-lg"
               >
                 Играть!
