@@ -434,8 +434,9 @@ function setupLevel(level: number): {
     : [...updatedPairIds];
 
   // Pick trap pairIds (from non-bonus pairs) — level 8 has no traps
+  // Use updatedPairIds for bonus check, original pairIds for non-bonus
   const bonusPairIdSet = new Set(bonusPairIds);
-  const nonBonusPairIds = pairIds.filter(id => !bonusPairIdSet.has(id));
+  const nonBonusPairIds = updatedPairIds.filter(id => !bonusPairIdSet.has(id));
   const trapPairIds = isColorMatch ? [] : shuffleArray(nonBonusPairIds).slice(0, config.trapCount);
 
   // Assign trap types based on level blocks
