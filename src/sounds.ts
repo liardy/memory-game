@@ -148,3 +148,37 @@ export function playTimerTick() {
 export function playUIClick() {
   playTone(600, 0.04, 'sine', 0.05);
 }
+
+// Background music — random track per round, loops until stopped
+const MUSIC_TRACKS = [
+  '/music/bertsz-cyberpunk-alleyway-ambient-188519.mp3',
+  '/music/leberch-cyberpunk-437545.mp3',
+  '/music/leberch-cyberpunk-drone-375259.mp3',
+  '/music/mondamusic-cyberpunk-512862.mp3',
+  '/music/sound4stock-dark-cyberpunk-future-electronic-473179.mp3',
+  '/music/soundgallerybydmitrytaras-cyberpunk-sci-fi-179625.mp3',
+  '/music/the_mountain-suspense-cyberpunk-375986.mp3',
+  '/music/tunetank-cyberpunk-futuristic-background-349787.mp3',
+];
+
+let currentAudio: HTMLAudioElement | null = null;
+
+export function startRoundMusic() {
+  stopRoundMusic();
+  const track = MUSIC_TRACKS[Math.floor(Math.random() * MUSIC_TRACKS.length)];
+  const audio = new Audio(track);
+  audio.loop = true;
+  audio.volume = 0.3;
+  audio.play().catch(() => {
+    // Autoplay blocked — will play after first user interaction
+  });
+  currentAudio = audio;
+}
+
+export function stopRoundMusic() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = '';
+    currentAudio = null;
+  }
+}

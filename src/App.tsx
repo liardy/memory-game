@@ -3,7 +3,7 @@ import Card from './components/Card';
 import ScorePanel, { Bonus } from './components/ScorePanel';
 import SpaceBackground from './components/SpaceBackground';
 import { submitScore, getTopScores, LeaderboardEntry } from './leaderboard';
-import { playFlip, playMatch, playMismatch, playBonusCollect, playBonusUse, playBonusLost, playTrap, playLevelComplete, playGameOver, playGameWon, playTimerTick, playUIClick } from './sounds';
+import { playFlip, playMatch, playMismatch, playBonusCollect, playBonusUse, playBonusLost, playTrap, playLevelComplete, playGameOver, playGameWon, playTimerTick, playUIClick, startRoundMusic, stopRoundMusic } from './sounds';
 import './App.css';
 
 interface GameCard {
@@ -357,6 +357,7 @@ const TRAP_BLOCK_4: TrapDef[] = [
     apply: ({ setGameOver, setIsActive, showTrapMessage }) => {
       showTrapMessage('☠️ Смерть! Ловушка не была помечена — проигрыш!');
       playGameOver();
+      stopRoundMusic();
       setGameOver(true);
       setIsActive(false);
     }
@@ -621,6 +622,7 @@ function App() {
     setCardsOpenedInPhase(0);
     setFailCounter(0);
     failCounterRef.current = 0;
+    startRoundMusic();
 
     // Check for special round condition
     const condition = ROUND_CONDITIONS.find(c => c.level === lvl) || null;
@@ -736,6 +738,7 @@ function App() {
             }
             setGameOver(true);
             playGameOver();
+            stopRoundMusic();
             setIsActive(false);
             return 0;
           }
@@ -861,6 +864,7 @@ function App() {
 
     if (level >= MAX_LEVEL) {
       playGameWon();
+      stopRoundMusic();
       setGameWon(true);
       const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500', '#ff1493'];
       setConfetti(Array.from({ length: 100 }, (_, i) => ({
@@ -1548,6 +1552,7 @@ function App() {
   );
 
   const handleRestart = () => {
+    stopRoundMusic();
     setLevel(1);
     initLevel(1);
     setBonuses([]);
