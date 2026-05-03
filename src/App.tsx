@@ -485,6 +485,7 @@ function App() {
   const [swappingIndices, setSwappingIndices] = useState<Set<number>>(new Set());
   const pendingSwapRef = useRef<(() => void) | null>(null);
   const [trapShiftCountdown, setTrapShiftCountdown] = useState<number | null>(null);
+  const [freezeCountdown, setFreezeCountdown] = useState<number | null>(null);
   const [debugLogs, setDebugLogs] = useState<{ text: string; type: string }[]>([]);
   const [showDebugLog, setShowDebugLog] = useState(false);
 
@@ -838,11 +839,28 @@ function App() {
         case 'freeze': {
           setTimerFrozen(true);
           setBoardFrozen(true);
-          showBonusMsg('❄️ Заморозка! Всё заморожено на 10 сек!');
+          setFreezeCountdown(10);
+          showBonusMsg('❄️ Заморозка! 10 сек');
           if (freezeTimerRef.current) clearTimeout(freezeTimerRef.current);
+          const interval = setInterval(() => {
+            setFreezeCountdown(prev => {
+              if (prev === null || prev <= 1) {
+                clearInterval(interval);
+                setTimerFrozen(false);
+                setBoardFrozen(false);
+                setFreezeCountdown(null);
+                return null;
+              }
+              const next = prev - 1;
+              showBonusMsg(`❄️ Заморозка! ${next} сек`);
+              return next;
+            });
+          }, 1000);
           freezeTimerRef.current = setTimeout(() => {
+            clearInterval(interval);
             setTimerFrozen(false);
             setBoardFrozen(false);
+            setFreezeCountdown(null);
           }, 10000);
           break;
         }
