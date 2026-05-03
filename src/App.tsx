@@ -1394,8 +1394,8 @@ function App() {
               grantBonus(matchedPairId);
               setAvailableBonuses(prev => prev.filter(e => e !== matchedPairId));
               setBonusesCollected(prev => prev + 1);
-            } else if (availableBonuses.length > 0) {
-              // This pair's bonus was already collected/lost — lose the top available bonus
+            } else if (bonusMap[matchedPairId] && availableBonuses.length > 0) {
+              // This pair was a bonus pair but its bonus was already collected/lost — lose the top available bonus
               const lostEmoji = availableBonuses[0];
               const lostBonus = bonusMap[lostEmoji];
               console.log(`[BONUS LOST] lost=${lostEmoji} bonus=${lostBonus?.name}`);
