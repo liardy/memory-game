@@ -24,6 +24,7 @@ interface CardProps {
   isColorMode?: boolean;
   isTriggeredTrap?: boolean;
   isSwapping?: boolean;
+  isAnchored?: boolean;
 }
 
 // 5 different idle animation keyframes as inline styles
@@ -35,7 +36,7 @@ const IDLE_ANIMATIONS: React.CSSProperties[] = [
   { animationName: 'card-squish', animationDuration: '3.8s', animationTimingFunction: 'ease-in-out', animationIterationCount: 'infinite' },
 ];
 
-const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onContextMenu, disabled, isWrong, isHinted, isMarkedTrap, index, cardSize, isFloating, isSilhouette, isBlurred, isGhost, rotation, isSectionBlocked, colorIndex, isSlowOpen, isContentHidden, isColorMode, isTriggeredTrap, isSwapping }) => {
+const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onContextMenu, disabled, isWrong, isHinted, isMarkedTrap, index, cardSize, isFloating, isSilhouette, isBlurred, isGhost, rotation, isSectionBlocked, colorIndex, isSlowOpen, isContentHidden, isColorMode, isTriggeredTrap, isSwapping, isAnchored }) => {
   const [sparkles, setSparkles] = useState<Array<{ id: number; x: number; y: number }>>([]);
 
   // Color palette for level 8 — strong contrasting colors
@@ -90,6 +91,12 @@ const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onCon
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
+      {/* Anchor indicator */}
+      {isAnchored && !isFlipped && !isMatched && (
+        <div className="absolute -top-1 -left-1 z-20 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs shadow-lg border-2 border-blue-300">
+          ⚓
+        </div>
+      )}
       {/* Trap mark indicator */}
       {isMarkedTrap && !isFlipped && !isMatched && (
         <div className="absolute -top-1 -right-1 z-20 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg border-2 border-red-300">
