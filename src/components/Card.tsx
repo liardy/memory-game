@@ -143,10 +143,11 @@ const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onCon
           }}
         >
           {isColorMode ? null : (
-            <span style={{
-              ...(isContentHidden && !isSilhouette ? { opacity: 0 } : {}),
-              ...(isSilhouette ? { filter: 'brightness(0)' } : {}),
-            }}>{emoji}</span>
+            <div style={isSilhouette ? { filter: 'brightness(0)' } : {}}>
+              <span style={{
+                ...(isContentHidden && !isSilhouette ? { opacity: 0 } : {}),
+              }}>{emoji}</span>
+            </div>
           )}
 
           {/* Sparkles effect for matched cards */}
