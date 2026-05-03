@@ -79,6 +79,7 @@ const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onCon
 
   return (
     <div
+      data-testid={`card-${index}`}
       className={`relative cursor-pointer select-none perspective-1000 transition-all duration-300 ${disabled ? 'pointer-events-none' : ''
         } ${isMatched ? 'opacity-80' : ''} ${isHinted ? 'animate-hint-glow' : ''} ${isFloating ? 'animate-card-float' : ''} ${isSectionBlocked ? 'opacity-40 pointer-events-none' : ''} ${isSwapping ? 'scale-0' : ''} `}
       style={{

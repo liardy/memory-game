@@ -106,6 +106,7 @@ const ScorePanel: React.FC<ScorePanelProps> = ({
         {/* Right: Record + Restart */}
         <div className="flex items-center gap-1 sm:gap-3">
           <div
+            data-testid="record-btn"
             className="text-center bg-yellow-500/20 px-2 sm:px-3 py-1 rounded-lg border border-yellow-400/40 cursor-pointer select-none"
             onClick={onBackdoor}
             onContextMenu={(e) => e.preventDefault()}
@@ -117,6 +118,7 @@ const ScorePanel: React.FC<ScorePanelProps> = ({
             <div className="text-lg sm:text-xl font-bold text-yellow-300">{score}</div>
           </div>
           <button
+            data-testid="faq-btn"
             onClick={onFAQ}
             className="text-center bg-cyan-500/20 px-2 sm:px-3 py-1 rounded-lg border border-cyan-400/40 cursor-pointer select-none hover:scale-105 transition-all active:scale-95"
           >
@@ -124,6 +126,7 @@ const ScorePanel: React.FC<ScorePanelProps> = ({
             <div className="text-lg sm:text-xl font-bold text-cyan-300">❓</div>
           </button>
           <button
+            data-testid="restart-btn"
             onClick={onRestart}
             className="text-center bg-indigo-500/20 px-2 sm:px-3 py-1 rounded-lg border border-indigo-400/40 cursor-pointer select-none hover:scale-105 transition-all active:scale-95"
           >

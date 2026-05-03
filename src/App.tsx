@@ -482,6 +482,7 @@ function App() {
   const [swappingIndices, setSwappingIndices] = useState<Set<number>>(new Set());
   const pendingSwapRef = useRef<(() => void) | null>(null);
   const [trapShiftCountdown, setTrapShiftCountdown] = useState<number | null>(null);
+  const [debugLogs, setDebugLogs] = useState<{ text: string; type: string }[]>([]);
   const backdoorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const freezeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bonusMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -716,6 +717,8 @@ function App() {
       }
       return [...prev, { ...bonusDef, count: 1, cardEmoji: displayEmoji }];
     });
+    console.log(`[GRANT BONUS] pairId=${pairId} bonus=${bonusDef.name}`);
+    setDebugLogs(prev => [...prev.slice(-20), { text: `[GRANT BONUS] ${pairId} → ${bonusDef.name}`, type: 'bonus' }]);
     showBonusMsg(`Бонус получен: ${bonusDef.name}!`);
   }, [bonusMap, cards]);
 
@@ -726,6 +729,8 @@ function App() {
     if (roundCondition?.id === 'trapShift') return; // cannot mark traps in round 10
     if (cards[index].isFlipped || cards[index].isMatched) return;
 
+    console.log(`[RIGHT-CLICK] card=${index} — mark/unmark trap`);
+    setDebugLogs(prev => [...prev.slice(-20), { text: `[RIGHT-CLICK] #${index} — mark/unmark trap`, type: 'click' }]);
     setMarkedTraps(prev => {
       const next = new Set(prev);
       if (next.has(index)) {
@@ -921,6 +926,8 @@ function App() {
       if (!isActive) setIsActive(true);
       if (flippedCards.length === 2) return;
       if (cards[index].isFlipped || cards[index].isMatched || cards[index].isHinted) return;
+      console.log(`[CLICK] card=${index} emoji=${cards[index].emoji} pairId=${cards[index].pairId} flipped=${flippedCards.length}`);
+      setDebugLogs(prev => [...prev.slice(-20), { text: `[CLICK] #${index} ${cards[index].emoji} pairId=${cards[index].pairId}`, type: 'click' }]);
 
       // Microblast: open this card + 4 neighbors, then close non-matched
       if (roundModifiers.microblastNext) {
@@ -1137,6 +1144,8 @@ function App() {
                 .map(x => x.i);
               const bothMarked = trapCardIndices.every(idx => markedTraps.has(idx));
               if (bothMarked) {
+                console.log(`[TRAP NEUTRALIZED] pairId=${matchedPairId} — both cards marked`);
+                setDebugLogs(prev => [...prev.slice(-20), { text: `[TRAP NEUTRALIZED] ${matchedPairId} — both marked`, type: 'bonus' }]);
                 showBonusMsg(`🛡️ Ловушка нейтрализована пометкой!`);
               } else if (roundModifiers.cancelTrapNext) {
                 setRoundModifiers(prev => ({ ...prev, cancelTrapNext: false }));
@@ -1144,6 +1153,8 @@ function App() {
               } else {
                 const trapDef = trapDefs[trapIdx];
                 if (trapDef) {
+                  console.log(`[TRAP TRIGGERED] pairId=${matchedPairId} trap=${trapDef.id} name=${trapDef.name}`);
+                  setDebugLogs(prev => [...prev.slice(-20), { text: `[TRAP TRIGGERED] ${matchedPairId} → ${trapDef.id} ${trapDef.name}`, type: 'trap' }]);
                   setTrapsTriggered(prev => prev + 1);
                   setTriggeredTrapIds(prev => new Set(prev).add(matchedPairId));
                   showTrapMsg(`⚠️ Ловушка! ${trapDef.emoji} ${trapDef.name}: ${trapDef.description}`);
@@ -1164,6 +1175,8 @@ function App() {
               // Trap pairs don't interact with bonus mechanic — skip it
             } else if (availableBonuses.includes(matchedPairId)) {
               // This pair's bonus is still available — collect it!
+              console.log(`[BONUS COLLECTED] pairId=${matchedPairId} bonus=${bonusMap[matchedPairId]?.name}`);
+              setDebugLogs(prev => [...prev.slice(-20), { text: `[BONUS COLLECTED] ${matchedPairId} → ${bonusMap[matchedPairId]?.name}`, type: 'bonus' }]);
               grantBonus(matchedPairId);
               setAvailableBonuses(prev => prev.filter(e => e !== matchedPairId));
               setBonusesCollected(prev => prev + 1);
@@ -1171,6 +1184,8 @@ function App() {
               // This pair's bonus was already collected/lost — lose the top available bonus
               const lostEmoji = availableBonuses[0];
               const lostBonus = bonusMap[lostEmoji];
+              console.log(`[BONUS LOST] lost=${lostEmoji} bonus=${lostBonus?.name}`);
+              setDebugLogs(prev => [...prev.slice(-20), { text: `[BONUS LOST] ${lostEmoji} → ${lostBonus?.name}`, type: 'trap' }]);
               setAvailableBonuses(prev => prev.slice(1));
               showBonusMsg(`❌ Бонус ${lostBonus?.emoji || ''} ${lostBonus?.name || ''} потерян!`);
             }
@@ -1684,7 +1699,10 @@ function App() {
 
         {/* Level selector backdoor overlay */}
         {showLevelSelect && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
+          <div data-testid="level-select-overlay" tabIndex={0} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn outline-none"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowLevelSelect(false); }}
+            onKeyDown={(e) => { if (e.key === 'Escape') setShowLevelSelect(false); }}
+          >
             <div className="bg-gradient-to-br from-indigo-700 to-purple-800 rounded-3xl p-8 text-center shadow-2xl border border-indigo-300/30 max-w-md mx-4 animate-bounceIn">
               <div className="text-4xl mb-3">🔓</div>
               <h2 className="text-xl font-bold mb-4 text-white">Выбор раунда</h2>
@@ -1692,7 +1710,9 @@ function App() {
                 {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map(lvl => (
                   <button
                     key={lvl}
+                    data-testid={`level-btn-${lvl}`}
                     onClick={() => {
+                      console.log(`[LEVEL SELECT] clicking level ${lvl}, closing overlay`);
                       setLevel(lvl);
                       initLevel(lvl);
                       setShowLevelSelect(false);
@@ -1910,6 +1930,17 @@ function App() {
           </div>
         )}
 
+        {/* Debug log panel */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/80 text-green-400 font-mono text-xs max-h-32 overflow-y-auto px-2 py-1 border-t border-green-500/30">
+            <div className="text-green-300 font-bold mb-1">🔍 Debug Log</div>
+            {debugLogs.map((log, i) => (
+              <div key={i} className={log.type === 'trap' ? 'text-red-400' : log.type === 'bonus' ? 'text-yellow-300' : log.type === 'click' ? 'text-green-400' : 'text-blue-300'}>
+                {log.text}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div >
   );
