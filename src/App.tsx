@@ -18,6 +18,47 @@ interface GameCard {
   isBlurred?: boolean; // blur trap: card stays blurred even when flipped back
 }
 
+interface MemoryGameTestSnapshot {
+  level: number;
+  timeLeft: number;
+  score: number;
+  gameWon: boolean;
+  gameOver: boolean;
+  timerFrozen: boolean;
+  boardFrozen: boolean;
+  freezeCountdown: number | null;
+  trapShiftCountdown: number | null;
+  bonusesCollected: number;
+  trapsTriggered: number;
+  roundConditionId: string | null;
+  availableBonuses: string[];
+  bonusMapByPairId: Record<string, { id: string; description: string }>;
+  trapPairIds: string[];
+  bonuses: Array<{ id: string; description: string; count: number }>;
+  roundModifiers: RoundModifiers;
+  cards: Array<{
+    id: number;
+    index: number;
+    emoji: string;
+    pairId: string;
+    rotation?: number;
+    isFlipped: boolean;
+    isMatched: boolean;
+    isHinted: boolean;
+    contentHidden: boolean;
+  }>;
+}
+
+declare global {
+  interface Window {
+    __MEMORY_GAME_TEST_API__?: {
+      getSnapshot: () => MemoryGameTestSnapshot;
+      setTimeLeftForTest: (value: number) => void;
+      startLevelForTest: (level: number, forcedBonusIds?: string[]) => void;
+    };
+  }
+}
+
 // All available emojis (16 for variety across levels)
 const ALL_EMOJIS = ['🚀', '🌟', '🪐', '👽', '🌙', '☄️', '🛸', '🌌', '🔮', '🎭', '🦄', '🐉', '🦋', '🌺', '🍄', '⚡', '🎃', '🎯', '🦊'];
 
@@ -387,7 +428,7 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 // Setup level: pick emojis, assign bonuses to ALL pairs & traps to some non-bonus ones
-function setupLevel(level: number): {
+function setupLevel(level: number, forcedBonusIds: string[] = []): {
   cards: GameCard[];
   bonusMap: Record<string, Bonus>;
   bonusOrder: string[]; // ordered pairId list for "top bonus lost" mechanic
@@ -401,7 +442,13 @@ function setupLevel(level: number): {
   const isColorMatch = level === 8;
 
   // Assign bonuses first: pick bonus IDs (shuffled for variety), get their static emojis
-  const bonusIds = shuffleArray(Object.keys(BONUS_ID_TO_EMOJI));
+  const requestedBonusIds = forcedBonusIds.filter((id, index) =>
+    Object.prototype.hasOwnProperty.call(BONUS_ID_TO_EMOJI, id) && forcedBonusIds.indexOf(id) === index
+  );
+  const randomBonusIds = shuffleArray(
+    Object.keys(BONUS_ID_TO_EMOJI).filter(id => !requestedBonusIds.includes(id))
+  );
+  const bonusIds = [...requestedBonusIds, ...randomBonusIds];
   const selectedBonuses = bonusIds.slice(0, config.bonusCount);
   const bonusEmojis = selectedBonuses.map(id => BONUS_ID_TO_EMOJI[id]);
 
@@ -468,7 +515,9 @@ function App() {
   const [gameWon, setGameWon] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [timerFrozen, setTimerFrozen] = useState(false);
+  const timerFrozenRef = useRef(false);
   const [boardFrozen, setBoardFrozen] = useState(false);
+  const boardFrozenRef = useRef(false);
   const [bonuses, setBonuses] = useState<Bonus[]>([]);
   const [bonusMap, setBonusMap] = useState<Record<string, Bonus>>({});
   const [bonusOrder, setBonusOrder] = useState<string[]>([]); // ordered emojis for "top bonus lost"
@@ -532,8 +581,8 @@ function App() {
   const hideContentTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   // Initialize level
-  const initLevel = useCallback((lvl: number) => {
-    const setup = setupLevel(lvl);
+  const initLevel = useCallback((lvl: number, forcedBonusIds: string[] = []) => {
+    const setup = setupLevel(lvl, forcedBonusIds);
     const config = LEVELS[Math.min(lvl - 1, LEVELS.length - 1)];
     setCards(setup.cards);
     setBonusMap(setup.bonusMap);
@@ -584,6 +633,77 @@ function App() {
   }, []);
 
   useEffect(() => {
+    window.__MEMORY_GAME_TEST_API__ = {
+      getSnapshot: () => ({
+        level,
+        timeLeft,
+        score,
+        gameWon,
+        gameOver,
+        timerFrozen,
+        boardFrozen,
+        freezeCountdown,
+        trapShiftCountdown,
+        bonusesCollected,
+        trapsTriggered,
+        roundConditionId: roundCondition?.id || null,
+        availableBonuses: [...availableBonuses],
+        bonusMapByPairId: Object.fromEntries(
+          Object.entries(bonusMap).map(([pairId, bonus]) => [
+            pairId,
+            { id: bonus.id, description: bonus.description },
+          ])
+        ),
+        trapPairIds: [...trapPairIds],
+        bonuses: bonuses.map(({ id, description, count }) => ({ id, description, count })),
+        roundModifiers: { ...roundModifiers },
+        cards: cards.map((card, index) => ({
+          id: card.id,
+          index,
+          emoji: card.emoji,
+          pairId: card.pairId,
+          rotation: card.rotation,
+          isFlipped: !!card.isFlipped,
+          isMatched: !!card.isMatched,
+          isHinted: !!card.isHinted,
+          contentHidden: !!card.contentHidden,
+        })),
+      }),
+      setTimeLeftForTest: (value: number) => setTimeLeft(value),
+      startLevelForTest: (targetLevel: number, forcedBonusIds: string[] = []) => {
+        setLevel(targetLevel);
+        initLevel(targetLevel, forcedBonusIds);
+        setShowIntro(false);
+        setShowRoundCondition(false);
+      },
+    };
+
+    return () => {
+      delete window.__MEMORY_GAME_TEST_API__;
+    };
+  }, [
+    availableBonuses,
+    boardFrozen,
+    bonusMap,
+    bonuses,
+    bonusesCollected,
+    cards,
+    freezeCountdown,
+    gameOver,
+    gameWon,
+    initLevel,
+    level,
+    roundModifiers,
+    roundCondition,
+    score,
+    timeLeft,
+    timerFrozen,
+    trapShiftCountdown,
+    trapsTriggered,
+    trapPairIds,
+  ]);
+
+  useEffect(() => {
     initLevel(1);
     setBonuses([]);
   }, []);
@@ -623,6 +743,10 @@ function App() {
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
 
+  // Keep frozen refs in sync
+  useEffect(() => { timerFrozenRef.current = timerFrozen; }, [timerFrozen]);
+  useEffect(() => { boardFrozenRef.current = boardFrozen; }, [boardFrozen]);
+
   useEffect(() => {
     if (roundCondition?.id !== 'trapShift' || !isActive || gameWon || gameOver) {
       setTrapShiftCountdown(null);
@@ -630,9 +754,11 @@ function App() {
     }
     setTrapShiftCountdown(10);
     const countdownInterval = setInterval(() => {
+      if (timerFrozenRef.current || boardFrozenRef.current || roundModifiersRef.current.paused) return;
       setTrapShiftCountdown(prev => prev !== null && prev > 1 ? prev - 1 : 10);
     }, 1000);
     const swapInterval = setInterval(() => {
+      if (timerFrozenRef.current || boardFrozenRef.current || roundModifiersRef.current.paused) return;
       const currentCards = cardsRef.current;
       const trapIndices = currentCards.map((c, i) => ({ c, i }))
         .filter(x => !x.c.isFlipped && !x.c.isMatched && trapPairIds.includes(x.c.pairId))
@@ -1468,7 +1594,7 @@ function App() {
 
     for (let i = 0; i < cards.length; i++) {
       const angle = i * goldenAngle;
-      let radius = 40; // start from center with some offset
+      const radius = 40; // start from center with some offset
       let placed = false;
 
       // Increase radius until we find a non-overlapping position

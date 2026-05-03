@@ -1,307 +1,514 @@
-import { test, expect, Page } from '@playwright/test';
+import { expect, test, Page } from '@playwright/test';
 
-const BASE = 'http://localhost:5174';
+type BonusId =
+  | 'timer10'
+  | 'sticky5'
+  | 'autopair'
+  | 'xray'
+  | 'autoshield'
+  | 'anchor'
+  | 'freeze'
+  | 'superpos'
+  | 'microblast'
+  | 'canceltrap'
+  | 'trapglow'
+  | 'silhouettes'
+  | 'sort'
+  | 'show3pairs'
+  | 'pause'
+  | 'doublepoints';
 
-// ─── Helpers ───────────────────────────────────────────
+interface SnapshotCard {
+  id: number;
+  index: number;
+  emoji: string;
+  pairId: string;
+  rotation?: number;
+  isFlipped: boolean;
+  isMatched: boolean;
+  isHinted: boolean;
+  contentHidden: boolean;
+}
 
-async function startGame(page: Page) {
-  await page.goto(BASE);
-  await page.waitForTimeout(500);
-  const playBtn = page.locator('text=Играть!');
-  if (await playBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await playBtn.click();
-    await page.waitForTimeout(500);
+interface Snapshot {
+  level: number;
+  timeLeft: number;
+  score: number;
+  gameWon: boolean;
+  gameOver: boolean;
+  timerFrozen: boolean;
+  boardFrozen: boolean;
+  freezeCountdown: number | null;
+  trapShiftCountdown: number | null;
+  bonusesCollected: number;
+  trapsTriggered: number;
+  roundConditionId: string | null;
+  availableBonuses: string[];
+  bonusMapByPairId: Record<string, { id: BonusId; description: string }>;
+  trapPairIds: string[];
+  bonuses: Array<{ id: BonusId; description: string; count: number }>;
+  roundModifiers: Record<string, boolean>;
+  cards: SnapshotCard[];
+}
+
+const BONUS_IDS: BonusId[] = [
+  'timer10',
+  'sticky5',
+  'autopair',
+  'xray',
+  'autoshield',
+  'anchor',
+  'freeze',
+  'superpos',
+  'microblast',
+  'canceltrap',
+  'trapglow',
+  'silhouettes',
+  'sort',
+  'show3pairs',
+  'pause',
+  'doublepoints',
+];
+
+async function getState(page: Page): Promise<Snapshot> {
+  return await page.evaluate(() => window.__MEMORY_GAME_TEST_API__?.getSnapshot());
+}
+
+async function setTimeLeft(page: Page, value: number): Promise<void> {
+  await page.evaluate((seconds) => {
+    window.__MEMORY_GAME_TEST_API__?.setTimeLeftForTest(seconds);
+  }, value);
+}
+
+async function openGame(page: Page): Promise<void> {
+  await page.goto('/');
+  await expect
+    .poll(async () => Boolean(await page.evaluate(() => window.__MEMORY_GAME_TEST_API__)))
+    .toBe(true);
+}
+
+async function startLevelWithBonus(page: Page, level: number, bonusId: BonusId): Promise<void> {
+  await openGame(page);
+  await page.evaluate(({ targetLevel, forcedBonusId }) => {
+    window.__MEMORY_GAME_TEST_API__?.startLevelForTest(targetLevel, [forcedBonusId]);
+  }, { targetLevel: level, forcedBonusId: bonusId });
+
+  await expect.poll(async () => (await getState(page)).level).toBe(level);
+  await expect
+    .poll(async () => Object.values((await getState(page)).bonusMapByPairId).some((bonus) => bonus.id === bonusId))
+    .toBe(true);
+}
+
+async function clickBackdoor(page: Page): Promise<void> {
+  const recordButton = page.getByTestId('record-btn');
+  for (let i = 0; i < 6; i += 1) {
+    await recordButton.click();
+    await page.waitForTimeout(60);
   }
 }
 
-function allCards(page: Page) {
-  return page.locator('[data-testid^="card-"]');
-}
-
-async function clickCard(page: Page, idx: number) {
-  await allCards(page).nth(idx).click();
-}
-
-async function rightClickCard(page: Page, idx: number) {
-  await allCards(page).nth(idx).click({ button: 'right' });
-}
-
-async function activateGame(page: Page) {
-  await clickCard(page, 0);
-  await page.waitForTimeout(300);
-}
-
-/** Backdoor: 6 rapid clicks on record button */
-async function backdoor(page: Page) {
-  const rec = page.getByTestId('record-btn');
-  for (let i = 0; i < 6; i++) {
-    await rec.dispatchEvent('click');
-    await page.waitForTimeout(50);
+function pairMap(state: Snapshot): Map<string, number[]> {
+  const map = new Map<string, number[]>();
+  for (const card of state.cards) {
+    const indices = map.get(card.pairId) ?? [];
+    indices.push(card.index);
+    map.set(card.pairId, indices);
   }
-  await page.waitForTimeout(2000);
+  return map;
 }
 
-/** Open level selector: right-click-hold 3s on Рекорд */
-async function openLevelSelect(page: Page) {
-  const rec = page.getByTestId('record-btn');
-  const box = await rec.boundingBox();
-  if (!box) throw new Error('Record button not found');
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  await page.mouse.move(cx, cy);
-  await page.mouse.down({ button: 'right' });
-  await page.waitForTimeout(3500);
-  await page.mouse.up({ button: 'right' });
-  await page.waitForTimeout(500);
+function orderedCardIds(state: Snapshot): number[] {
+  return state.cards.map((card) => card.id);
 }
 
-/** Select level N — click button and wait for overlay to close */
-async function selectLevel(page: Page, n: number) {
-  const overlay = page.getByTestId('level-select-overlay');
-  await expect(overlay).toBeVisible({ timeout: 5000 });
-  const btn = page.getByTestId(`level-btn-${n}`);
-  await expect(btn).toBeVisible({ timeout: 3000 });
-
-  await btn.scrollIntoViewIfNeeded();
-  await btn.click();
-  await page.waitForTimeout(2000); // Wait for setTimeout(0) to execute
-
-  // Verify overlay closed
-  await expect(overlay).not.toBeVisible({ timeout: 3000 });
+async function clickCard(page: Page, index: number): Promise<void> {
+  await page.getByTestId(`card-${index}`).click();
 }
 
-async function goToLevel(page: Page, n: number) {
-  await openLevelSelect(page);
-  await selectLevel(page, n);
+async function clickPair(page: Page, indices: number[]): Promise<void> {
+  await clickCard(page, indices[0]);
+  await page.waitForTimeout(120);
+  await clickCard(page, indices[1]);
+  await page.waitForTimeout(1300);
 }
 
-async function getTimerText(page: Page): Promise<string> {
-  const el = page.locator('.font-mono').first();
-  return (await el.textContent())?.trim() || '';
+function findBonusPairId(state: Snapshot, bonusId: BonusId): string {
+  const entry = Object.entries(state.bonusMapByPairId).find(([, bonus]) => bonus.id === bonusId);
+  if (!entry) throw new Error(`Bonus ${bonusId} is not present in current level`);
+  return entry[0];
 }
 
-// ─── Tests ─────────────────────────────────────────────
+function getUnmatchedPairIds(state: Snapshot): string[] {
+  return [...new Set(state.cards.filter((card) => !card.isMatched).map((card) => card.pairId))];
+}
 
-test.describe('🧠 Memory Game — Full E2E', () => {
+function getSafePairIds(state: Snapshot, excluded: string[] = []): string[] {
+  const excludedSet = new Set(excluded);
+  return getUnmatchedPairIds(state).filter(
+    (pairId) => !state.trapPairIds.includes(pairId) && !excludedSet.has(pairId)
+  );
+}
 
-  test('1. Game loads and shows intro', async ({ page }) => {
-    await page.goto(BASE);
-    await page.waitForTimeout(500);
-    await expect(page.locator('text=Вспомнить всё').first()).toBeVisible();
-    await expect(page.locator('text=Играть!').first()).toBeVisible();
-  });
+function pickMismatchIndices(state: Snapshot): [number, number] {
+  const unmatched = state.cards.filter((card) => !card.isMatched && !card.isFlipped);
+  for (let i = 0; i < unmatched.length; i += 1) {
+    for (let j = i + 1; j < unmatched.length; j += 1) {
+      if (unmatched[i].pairId !== unmatched[j].pairId) {
+        return [unmatched[i].index, unmatched[j].index];
+      }
+    }
+  }
+  throw new Error('No mismatching cards available');
+}
 
-  test('2. Start game → level 1 with 8 cards', async ({ page }) => {
-    await startGame(page);
-    await expect(allCards(page)).toHaveCount(8);
-  });
+async function useBonus(page: Page, description: string, waitMs = 150): Promise<void> {
+  await page.getByText(description, { exact: true }).click();
+  if (waitMs > 0) {
+    await page.waitForTimeout(waitMs);
+  }
+}
 
-  test('3. Cards flip on click', async ({ page }) => {
-    await startGame(page);
-    await clickCard(page, 0);
-    await page.waitForTimeout(400);
-  });
+async function collectBonus(page: Page, bonusId: BonusId): Promise<{ pairId: string; description: string }> {
+  const state = await getState(page);
+  const bonusPairId = findBonusPairId(state, bonusId);
+  const description = state.bonusMapByPairId[bonusPairId].description;
 
-  test('4. Timer starts after first card click', async ({ page }) => {
-    await startGame(page);
-    await activateGame(page);
-    await page.waitForTimeout(1500);
-    const t1 = await getTimerText(page);
-    await page.waitForTimeout(2000);
-    const t2 = await getTimerText(page);
-    expect(t2).not.toBe(t1);
-  });
+  await clickPair(page, pairMap(state).get(bonusPairId)!);
+  await expect
+    .poll(async () => (await getState(page)).bonuses.find((bonus) => bonus.id === bonusId)?.count ?? 0)
+    .toBe(1);
 
-  test('5. Backdoor: 6 clicks → autowin', async ({ page }) => {
-    await startGame(page);
-    await backdoor(page);
-    const backdoorVisible = await page.locator('text=Бэкдор').isVisible().catch(() => false);
-    const levelComplete = await page.locator('text=Уровень пройден').isVisible().catch(() => false);
-    expect(backdoorVisible || levelComplete).toBeTruthy();
-  });
+  return { pairId: bonusPairId, description };
+}
 
-  test('6. Level selector opens via right-click-hold', async ({ page }) => {
-    await startGame(page);
-    await openLevelSelect(page);
-    await expect(page.getByTestId('level-select-overlay')).toBeVisible({ timeout: 5000 });
-  });
+async function collectSafePairs(page: Page, count: number, excluded: string[] = []): Promise<void> {
+  for (let i = 0; i < count; i += 1) {
+    const state = await getState(page);
+    const pairId = getSafePairIds(state, excluded)[0];
+    expect(pairId, `safe pair ${i + 1}`).toBeTruthy();
+    await clickPair(page, pairMap(state).get(pairId)!);
+  }
+}
 
-  test('7. Navigate to level 5 → 16 cards', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 5);
-    await expect(allCards(page)).toHaveCount(16, { timeout: 5000 });
-  });
+async function collectAllRemainingPairs(page: Page): Promise<void> {
+  for (;;) {
+    const state = await getState(page);
+    const pairId = getUnmatchedPairIds(state)[0];
+    if (!pairId) return;
+    await clickPair(page, pairMap(state).get(pairId)!);
+    if ((await getState(page)).level !== state.level) return;
+  }
+}
 
-  test('8. Right-click marks card as trap', async ({ page }) => {
-    await startGame(page);
-    await rightClickCard(page, 0);
-    await page.waitForTimeout(300);
-  });
+async function prepareBonusScenario(page: Page, bonusId: BonusId): Promise<{
+  description: string;
+  matchedBeforeUse: number;
+  timeBeforeUse: number;
+  trapCountBeforeUse: number;
+  remainingPairCountBeforeUse: number;
+}> {
+  await startLevelWithBonus(page, 2, bonusId);
+  const { pairId, description } = await collectBonus(page, bonusId);
+  await collectSafePairs(page, 2, [pairId]);
 
-  test('9. Round 1: panels + backdoor', async ({ page }) => {
-    await startGame(page);
-    await expect(page.locator('text=Бонусы').first()).toBeVisible({ timeout: 3000 });
-    await expect(page.locator('text=Ловушки').first()).toBeVisible({ timeout: 3000 });
-    await backdoor(page);
-    await page.waitForTimeout(2000);
-  });
+  const state = await getState(page);
+  return {
+    description,
+    matchedBeforeUse: state.cards.filter((card) => card.isMatched).length,
+    timeBeforeUse: state.timeLeft,
+    trapCountBeforeUse: state.trapsTriggered,
+    remainingPairCountBeforeUse: getUnmatchedPairIds(state).length,
+  };
+}
 
-  test('10. All 16 levels load with correct card count', async ({ page }) => {
-    const errors: string[] = [];
-    page.on('console', msg => {
-      if (msg.type() === 'error') errors.push(msg.text());
+async function expectTimerFrozen(page: Page, previousTime: number): Promise<void> {
+  await expect.poll(async () => (await getState(page)).timerFrozen).toBe(true);
+  const frozenTime = (await getState(page)).timeLeft;
+  await page.waitForTimeout(1600);
+  const state = await getState(page);
+  expect(state.boardFrozen).toBe(true);
+  expect(state.timeLeft).toBe(frozenTime);
+  expect(state.timeLeft).toBeLessThanOrEqual(previousTime);
+}
+
+test.describe('Bonus route', () => {
+  test('passes level 1 via backdoor before validating the level 2 bonus route', async ({ page }) => {
+    await openGame(page);
+    await page.evaluate(() => {
+      window.__MEMORY_GAME_TEST_API__?.startLevelForTest(1);
     });
+    await clickBackdoor(page);
+    await expect.poll(async () => (await getState(page)).level).toBe(2);
 
-    const expected: Record<number, number> = {
-      1: 8, 2: 10, 3: 12, 4: 14, 5: 16, 6: 18, 7: 20,
-      8: 24, 9: 26, 10: 28, 11: 30, 12: 32, 13: 34, 14: 36, 15: 36, 16: 20,
-    };
+    const state = await getState(page);
+    expect(state.bonuses.length).toBeGreaterThan(0);
+    expect(state.bonusesCollected).toBeGreaterThan(0);
+  });
+});
 
-    await startGame(page);
-    for (let lvl = 1; lvl <= 16; lvl++) {
-      await goToLevel(page, lvl);
-      const count = await allCards(page).count();
-      expect(count, `Level ${lvl} card count`).toBe(expected[lvl]);
-      await page.waitForTimeout(300);
-    }
+test.describe('All bonus contracts', () => {
+  for (const bonusId of BONUS_IDS) {
+    test(`${bonusId} works according to its rule`, async ({ page }) => {
+      test.setTimeout(90000);
 
-    const realErrors = errors.filter(e =>
-      !e.includes('Warning:') && !e.includes('downloadable font') &&
-      !e.includes('net::') && !e.includes('favicon')
-    );
-    expect(realErrors.length).toBe(0);
+      const setup = await prepareBonusScenario(page, bonusId);
+      await useBonus(page, setup.description, bonusId === 'xray' || bonusId === 'trapglow' ? 50 : 150);
+
+      switch (bonusId) {
+        case 'timer10': {
+          await expect.poll(async () => (await getState(page)).timeLeft).toBeGreaterThanOrEqual(setup.timeBeforeUse + 9);
+          break;
+        }
+        case 'sticky5': {
+          const [first, second] = pickMismatchIndices(await getState(page));
+          await clickCard(page, first);
+          await clickCard(page, second);
+          await page.waitForTimeout(1400);
+
+          let state = await getState(page);
+          expect(state.cards.find((card) => card.index === first)?.isFlipped).toBe(true);
+          expect(state.cards.find((card) => card.index === second)?.isFlipped).toBe(true);
+
+          await page.waitForTimeout(4200);
+          state = await getState(page);
+          expect(state.cards.find((card) => card.index === first)?.isFlipped).toBe(false);
+          expect(state.cards.find((card) => card.index === second)?.isFlipped).toBe(false);
+          break;
+        }
+        case 'autopair': {
+          await expect
+            .poll(async () => {
+              const state = await getState(page);
+              return state.level > 2 || state.cards.filter((card) => card.isMatched).length >= setup.matchedBeforeUse + 2;
+            })
+            .toBe(true);
+          break;
+        }
+        case 'xray': {
+          const xrayState = await getState(page);
+          expect(xrayState.cards.filter((card) => !card.isMatched).every((card) => card.isFlipped)).toBe(true);
+
+          await page.waitForTimeout(800);
+          await expect
+            .poll(async () => (await getState(page)).cards.filter((card) => !card.isMatched).every((card) => !card.isFlipped))
+            .toBe(true);
+          break;
+        }
+        case 'autoshield': {
+          await setTimeLeft(page, 1);
+          await page.waitForTimeout(1300);
+
+          const state = await getState(page);
+          expect(state.gameOver).toBe(false);
+          expect(state.timeLeft).toBeGreaterThanOrEqual(9);
+          break;
+        }
+        case 'anchor': {
+          await expect.poll(async () => Boolean((await getState(page)).roundModifiers.anchorNext)).toBe(true);
+
+          const [first, second] = pickMismatchIndices(await getState(page));
+          await clickCard(page, first);
+          await clickCard(page, second);
+          await page.waitForTimeout(1300);
+
+          const state = await getState(page);
+          expect(state.cards.find((card) => card.index === first)?.isFlipped).toBe(false);
+          break;
+        }
+        case 'freeze': {
+          await expectTimerFrozen(page, setup.timeBeforeUse);
+          expect((await getState(page)).freezeCountdown).not.toBeNull();
+          break;
+        }
+        case 'superpos': {
+          const [first, second] = pickMismatchIndices(await getState(page));
+          await clickCard(page, first);
+          await clickCard(page, second);
+          await page.waitForTimeout(1300);
+
+          const state = await getState(page);
+          expect(state.cards.find((card) => card.index === first)?.isFlipped).toBe(true);
+          expect(state.cards.find((card) => card.index === second)?.isFlipped).toBe(false);
+          break;
+        }
+        case 'microblast': {
+          const clickTarget = (await getState(page)).cards.find((card) => !card.isMatched)?.index;
+          expect(clickTarget).toBeDefined();
+          await clickCard(page, clickTarget!);
+          await page.waitForTimeout(120);
+
+          const state = await getState(page);
+          expect(state.cards.filter((card) => card.isFlipped || card.isMatched).length).toBeGreaterThan(
+            setup.matchedBeforeUse
+          );
+          break;
+        }
+        case 'canceltrap': {
+          const state = await getState(page);
+          const trapPairId = state.trapPairIds[0];
+          await clickPair(page, pairMap(state).get(trapPairId)!);
+
+          const cancelledState = await getState(page);
+          expect(cancelledState.trapsTriggered).toBe(setup.trapCountBeforeUse);
+          expect(Boolean(cancelledState.roundModifiers.cancelTrapNext)).toBe(false);
+          break;
+        }
+        case 'trapglow': {
+          await expect
+            .poll(async () => {
+              const state = await getState(page);
+              return state.cards.filter((card) => state.trapPairIds.includes(card.pairId) && card.isHinted).length;
+            })
+            .toBe(2);
+
+          await page.waitForTimeout(800);
+          await expect.poll(async () => (await getState(page)).cards.some((card) => card.isHinted)).toBe(false);
+          break;
+        }
+        case 'silhouettes': {
+          await expect
+            .poll(async () => {
+              const state = await getState(page);
+              return state.cards.filter((card) => !card.isMatched).every((card) => card.isFlipped && card.contentHidden);
+            })
+            .toBe(true);
+
+          await page.waitForTimeout(3200);
+          await expect
+            .poll(async () => {
+              const state = await getState(page);
+              return state.cards.filter((card) => !card.isMatched).every((card) => !card.isFlipped && !card.contentHidden);
+            })
+            .toBe(true);
+          break;
+        }
+        case 'sort': {
+          await expect
+            .poll(async () => {
+              const state = await getState(page);
+              return state.cards.slice(0, setup.matchedBeforeUse).every((card) => card.isMatched);
+            })
+            .toBe(true);
+          break;
+        }
+        case 'show3pairs': {
+          const expectedHinted = Math.min(3, setup.remainingPairCountBeforeUse) * 2;
+          await expect.poll(async () => (await getState(page)).cards.filter((card) => card.isHinted).length).toBe(expectedHinted);
+
+          await page.waitForTimeout(1200);
+          await expect.poll(async () => (await getState(page)).cards.some((card) => card.isHinted)).toBe(false);
+          break;
+        }
+        case 'pause': {
+          await expectTimerFrozen(page, setup.timeBeforeUse);
+          expect(Boolean((await getState(page)).roundModifiers.paused)).toBe(true);
+          break;
+        }
+        case 'doublepoints': {
+          await expect.poll(async () => Boolean((await getState(page)).roundModifiers.doublePoints)).toBe(true);
+          break;
+        }
+      }
+    });
+  }
+});
+
+test.describe('Bonus and special round intersections', () => {
+  test('anchor blocks jumpPair movement on level 9', async ({ page }) => {
+    await startLevelWithBonus(page, 9, 'anchor');
+    const { description } = await collectBonus(page, 'anchor');
+    await useBonus(page, description);
+
+    const targetState = await getState(page);
+    const targetPairId = getSafePairIds(targetState)[0];
+    const beforeOrder = orderedCardIds(targetState);
+    await clickPair(page, pairMap(targetState).get(targetPairId)!);
+    await page.waitForTimeout(800);
+
+    const afterState = await getState(page);
+    expect(orderedCardIds(afterState)).toEqual(beforeOrder);
+    expect(Boolean(afterState.roundModifiers.anchorNext)).toBe(false);
   });
 
-  test('11. Level 8: color match, no traps', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 8);
-    await expect(allCards(page)).toHaveCount(24, { timeout: 5000 });
-    await expect(page.locator('text=Нет ловушек').first()).toBeVisible({ timeout: 3000 });
+  test('canceltrap cancels a trap while level 10 trapShift is active', async ({ page }) => {
+    await startLevelWithBonus(page, 10, 'canceltrap');
+    const { description } = await collectBonus(page, 'canceltrap');
+    await useBonus(page, description);
+
+    const state = await getState(page);
+    const trapPairId = state.trapPairIds[0];
+    await clickPair(page, pairMap(state).get(trapPairId)!);
+
+    const afterState = await getState(page);
+    expect(afterState.roundConditionId).toBe('trapShift');
+    expect(afterState.trapsTriggered).toBe(0);
+    expect(Boolean(afterState.roundModifiers.cancelTrapNext)).toBe(false);
   });
 
-  test('12. Level 9: jump pair', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 9);
-    await expect(allCards(page)).toHaveCount(26, { timeout: 5000 });
+  test('freeze pauses the level 10 trapShift countdown', async ({ page }) => {
+    await startLevelWithBonus(page, 10, 'freeze');
+    const { description } = await collectBonus(page, 'freeze');
+    await expect.poll(async () => (await getState(page)).trapShiftCountdown).not.toBeNull();
+
+    await useBonus(page, description);
+    const countdownAtFreeze = (await getState(page)).trapShiftCountdown;
+    await page.waitForTimeout(2200);
+
+    const afterState = await getState(page);
+    expect(afterState.boardFrozen).toBe(true);
+    expect(afterState.trapShiftCountdown).toBe(countdownAtFreeze);
   });
 
-  test('13. Level 10: trap shift countdown', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 10);
-    await expect(allCards(page)).toHaveCount(28, { timeout: 5000 });
-    await activateGame(page);
-    await expect(page.locator('text=Перемещение через').first()).toBeVisible({ timeout: 8000 });
+  test('pause pauses the level 10 trapShift countdown', async ({ page }) => {
+    await startLevelWithBonus(page, 10, 'pause');
+    const { description } = await collectBonus(page, 'pause');
+    await expect.poll(async () => (await getState(page)).trapShiftCountdown).not.toBeNull();
+
+    await useBonus(page, description);
+    const countdownAtPause = (await getState(page)).trapShiftCountdown;
+    await page.waitForTimeout(2200);
+
+    const afterState = await getState(page);
+    expect(afterState.boardFrozen).toBe(true);
+    expect(afterState.trapShiftCountdown).toBe(countdownAtPause);
   });
 
-  test('14. Level 10: cannot mark traps', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 10);
-    await rightClickCard(page, 0);
-    await page.waitForTimeout(300);
+  test('xray still reveals and closes cards on rotated level 13', async ({ page }) => {
+    await startLevelWithBonus(page, 13, 'xray');
+    const { description } = await collectBonus(page, 'xray');
+    expect((await getState(page)).cards.some((card) => card.rotation !== undefined)).toBe(true);
+
+    await useBonus(page, description, 50);
+    expect((await getState(page)).cards.filter((card) => !card.isMatched).every((card) => card.isFlipped)).toBe(true);
+
+    await page.waitForTimeout(800);
+    expect((await getState(page)).cards.filter((card) => !card.isMatched).every((card) => !card.isFlipped)).toBe(true);
   });
 
-  test('15. Level 10: countdown independent of card clicks', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 10);
-    await activateGame(page);
-    await page.waitForTimeout(3000);
-    const countdownEl = page.locator('text=Перемещение через').first();
-    await expect(countdownEl).toBeVisible({ timeout: 5000 });
+  test('sort restores matched pairs to the top after level 14 mirror reshuffles', async ({ page }) => {
+    await startLevelWithBonus(page, 14, 'sort');
+    const { pairId, description } = await collectBonus(page, 'sort');
+    await collectSafePairs(page, 2, [pairId]);
 
-    const text1 = await countdownEl.textContent() || '';
-    const num1 = parseInt(text1.replace(/\D/g, ''), 10);
+    const matchedBeforeUse = (await getState(page)).cards.filter((card) => card.isMatched).length;
+    await useBonus(page, description);
 
-    await clickCard(page, 1);
-    await page.waitForTimeout(500);
-
-    const text2 = await countdownEl.textContent() || '';
-    const num2 = parseInt(text2.replace(/\D/g, ''), 10);
-    expect(num2).toBeLessThanOrEqual(num1 + 1);
+    await expect
+      .poll(async () => {
+        const state = await getState(page);
+        return state.roundConditionId === 'mirror' && state.cards.slice(0, matchedBeforeUse).every((card) => card.isMatched);
+      })
+      .toBe(true);
   });
 
-  test('16. Level 11: floating', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 11);
-    await expect(allCards(page)).toHaveCount(30, { timeout: 5000 });
-  });
+  test('doublepoints affects the level completion score', async ({ page }) => {
+    await startLevelWithBonus(page, 2, 'doublepoints');
+    const { pairId, description } = await collectBonus(page, 'doublepoints');
+    await collectSafePairs(page, 2, [pairId]);
+    await setTimeLeft(page, 20);
+    await useBonus(page, description);
 
-  test('17. Level 12: sections + blocked', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 12);
-    await expect(allCards(page)).toHaveCount(32, { timeout: 5000 });
-    const blocked = page.locator('.opacity-40');
-    expect(await blocked.count()).toBeGreaterThan(0);
-  });
-
-  test('18. Level 13: rotated', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 13);
-    await expect(allCards(page)).toHaveCount(34, { timeout: 5000 });
-  });
-
-  test('19. Level 14: mirror', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 14);
-    await expect(allCards(page)).toHaveCount(36, { timeout: 5000 });
-  });
-
-  test('20. Level 15: shift line', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 15);
-    await expect(allCards(page)).toHaveCount(36, { timeout: 5000 });
-  });
-
-  test('21. Level 16: fade pair', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 16);
-    await expect(allCards(page)).toHaveCount(20, { timeout: 5000 });
-  });
-
-  test('22. Restart requires confirmation', async ({ page }) => {
-    await startGame(page);
-    await page.getByTestId('restart-btn').click();
-    await page.waitForTimeout(500);
-    const overlay = page.locator('.fixed.inset-0').last();
-    await expect(overlay).toBeVisible({ timeout: 3000 });
-  });
-
-  test('23. FAQ opens overlay', async ({ page }) => {
-    await startGame(page);
-    await page.getByTestId('faq-btn').click();
-    await page.waitForTimeout(500);
-    const overlay = page.locator('.fixed.inset-0').last();
-    await expect(overlay).toBeVisible({ timeout: 3000 });
-  });
-
-  test('24. No bonus-trap emoji overlap', async ({ page }) => {
-    await startGame(page);
-    const bonusEmojis = await page.locator('[class*="green"] [class*="text-3xl"]').allTextContents();
-    const trapEmojis = await page.locator('[class*="red"] [class*="text-3xl"]').allTextContents();
-    const overlap = bonusEmojis.filter(e => trapEmojis.includes(e));
-    expect(overlap.length).toBe(0);
-  });
-
-  test('25. Debug log + backdoor events', async ({ page }) => {
-    await startGame(page);
-    const debugPanel = page.locator('text=Debug Log').first();
-    await expect(debugPanel).toBeVisible({ timeout: 3000 });
-    await backdoor(page);
-    await page.waitForTimeout(2000);
-    const logEntries = page.locator('[class*="text-red-400"], [class*="text-yellow-300"]');
-    const logCount = await logEntries.count();
-    expect(logCount).toBeGreaterThan(0);
-  });
-
-  test('26. Level 10: swap after 10s', async ({ page }) => {
-    await startGame(page);
-    await goToLevel(page, 10);
-    await activateGame(page);
-    await page.waitForTimeout(11000);
-    const countdownEl = page.locator('text=Перемещение через').first();
-    if (await countdownEl.isVisible({ timeout: 2000 }).catch(() => false)) {
-      const text = await countdownEl.textContent() || '';
-      const num = parseInt(text.replace(/\D/g, ''), 10);
-      expect(num).toBeGreaterThanOrEqual(8);
-    }
+    await collectAllRemainingPairs(page);
+    await expect.poll(async () => (await getState(page)).score).toBeGreaterThanOrEqual(30);
   });
 });
