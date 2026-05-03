@@ -3,6 +3,7 @@ import Card from './components/Card';
 import ScorePanel, { Bonus } from './components/ScorePanel';
 import SpaceBackground from './components/SpaceBackground';
 import { submitScore, getTopScores, LeaderboardEntry } from './leaderboard';
+import { playFlip, playMatch, playMismatch, playBonusCollect, playBonusUse, playBonusLost, playTrap, playLevelComplete, playGameOver, playGameWon, playTimerTick, playUIClick } from './sounds';
 import './App.css';
 
 interface GameCard {
@@ -355,6 +356,7 @@ const TRAP_BLOCK_4: TrapDef[] = [
     description: 'Мгновенный проигрыш! (Если не помечана)',
     apply: ({ setGameOver, setIsActive, showTrapMessage }) => {
       showTrapMessage('☠️ Смерть! Ловушка не была помечена — проигрыш!');
+      playGameOver();
       setGameOver(true);
       setIsActive(false);
     }
@@ -733,10 +735,13 @@ function App() {
               return prev + 10;
             }
             setGameOver(true);
+            playGameOver();
             setIsActive(false);
             return 0;
           }
-          return timerFrozen ? prev : prev - roundModifiersRef.current.timerSpeed;
+          const next = timerFrozen ? prev : prev - roundModifiersRef.current.timerSpeed;
+          if (next <= 10 && next > 0) playTimerTick();
+          return next;
         });
       }, 1000);
     }
@@ -855,6 +860,7 @@ function App() {
     setScore(prev => prev + roundScore);
 
     if (level >= MAX_LEVEL) {
+      playGameWon();
       setGameWon(true);
       const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500', '#ff1493'];
       setConfetti(Array.from({ length: 100 }, (_, i) => ({
@@ -863,6 +869,7 @@ function App() {
       })));
       setTimeout(() => setConfetti([]), 5000);
     } else {
+      playLevelComplete();
       setShowLevelUp(true);
       setTimeout(() => {
         setShowLevelUp(false);
@@ -935,6 +942,7 @@ function App() {
   }, [cards, gameOver, gameWon, boardFrozen, trapPairIds]);
 
   const handleUseBonus = useCallback((bonusId: string) => {
+    playBonusUse();
     setBonuses(prev => {
       const bonus = prev.find(b => b.id === bonusId);
       if (!bonus || bonus.count <= 0) return prev;
@@ -1199,6 +1207,7 @@ function App() {
         if (sectionPhase === 1 && isEvenSection) return;
       }
 
+      playFlip();
       const newCards = [...cards];
       newCards[index].isFlipped = true;
       newCards[index].isWrong = false;
@@ -1266,6 +1275,7 @@ function App() {
           : cards[first].pairId === cards[second].pairId;
 
         if (isMatch) {
+          playMatch();
           const matchedPairId = cards[first].pairId;
           const matchDelay = roundModifiers.slowOpen ? 1200 : roundModifiers.fastOpen ? 300 : 600;
           setTimeout(() => {
@@ -1373,6 +1383,7 @@ function App() {
                 if (trapDef) {
                   console.log(`[TRAP TRIGGERED] pairId=${matchedPairId} trap=${trapDef.id} name=${trapDef.name}`);
                   setDebugLogs(prev => [...prev.slice(-20), { text: `[TRAP TRIGGERED] ${matchedPairId} → ${trapDef.id} ${trapDef.name}`, type: 'trap' }]);
+                  playTrap();
                   setTrapsTriggered(prev => prev + 1);
                   setTriggeredTrapIds(prev => new Set(prev).add(matchedPairId));
                   showTrapMsg(`⚠️ Ловушка! ${trapDef.emoji} ${trapDef.name}: ${trapDef.description}`);
@@ -1395,6 +1406,7 @@ function App() {
               // This pair's bonus is still available — collect it!
               console.log(`[BONUS COLLECTED] pairId=${matchedPairId} bonus=${bonusMap[matchedPairId]?.name}`);
               setDebugLogs(prev => [...prev.slice(-20), { text: `[BONUS COLLECTED] ${matchedPairId} → ${bonusMap[matchedPairId]?.name}`, type: 'bonus' }]);
+              playBonusCollect();
               grantBonus(matchedPairId);
               setAvailableBonuses(prev => prev.filter(e => e !== matchedPairId));
               setBonusesCollected(prev => prev + 1);
@@ -1404,6 +1416,7 @@ function App() {
               const lostBonus = bonusMap[lostEmoji];
               console.log(`[BONUS LOST] lost=${lostEmoji} bonus=${lostBonus?.name}`);
               setDebugLogs(prev => [...prev.slice(-20), { text: `[BONUS LOST] ${lostEmoji} → ${lostBonus?.name}`, type: 'trap' }]);
+              playBonusLost();
               setAvailableBonuses(prev => prev.slice(1));
               showBonusMsg(`❌ Бонус ${lostBonus?.emoji || ''} ${lostBonus?.name || ''} потерян!`);
             }
@@ -1436,6 +1449,7 @@ function App() {
           setFailCounter(0);
         } else {
           // Failed match
+          playMismatch();
           const newFailCount = failCounterRef.current + 1;
           failCounterRef.current = newFailCount;
           setFailCounter(newFailCount);
@@ -1716,10 +1730,10 @@ function App() {
           timeLeft={timeLeft}
           maxTime={config.time}
           score={score}
-          onRestart={() => setShowRestartConfirm(true)}
+          onRestart={() => { playUIClick(); setShowRestartConfirm(true); }}
           onBackdoor={handleBackdoor}
-          onFAQ={() => setShowFAQ(true)}
-          onLeaderboard={openLeaderboard}
+          onFAQ={() => { playUIClick(); setShowFAQ(true); }}
+          onLeaderboard={() => { playUIClick(); openLeaderboard(); }}
           onLongRightPress={() => setShowLevelSelect(true)}
           timerFrozen={timerFrozen}
           boardFrozen={boardFrozen}
@@ -1922,7 +1936,7 @@ function App() {
               <p className="text-indigo-200 text-sm mb-6">Весь текущий прогресс будет потерян. Уверены, что хотите начать игру сначала?</p>
               <div className="flex gap-3 justify-center">
                 <button
-                  onClick={() => { handleRestart(); setShowRestartConfirm(false); }}
+                  onClick={() => { playUIClick(); handleRestart(); setShowRestartConfirm(false); }}
                   className="px-6 py-2.5 bg-red-500 text-white font-bold rounded-xl shadow-lg hover:bg-red-400 hover:scale-105 transition-all active:scale-95"
                 >
                   Да
