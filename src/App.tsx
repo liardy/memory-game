@@ -1656,7 +1656,9 @@ function App() {
               const displayEmoji = cards.find(c => c.pairId === pairId)?.emoji || pairId;
               return (
                 <div key={pairId} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-lg ${isNeutralized ? 'border-green-400/30 bg-green-500/10' : isTriggered ? 'border-red-400/60 bg-red-500/30 shadow-lg shadow-red-500/30' : 'border-red-400/30 bg-red-500/10'}`}>
-                  <span className="text-3xl" style={{ filter: 'grayscale(1) brightness(0.15) contrast(3)', textShadow: '0 0 3px #ef4444, 0 0 6px #ef4444, 0 0 9px #ef4444, 0 0 12px #ef4444' }}>{displayEmoji}</span>
+                  <div className="text-3xl" style={{ textShadow: '0 0 8px #ef4444, 0 0 16px #ef4444, 0 0 24px #ef4444' }}>
+                    <span style={{ filter: 'grayscale(1) brightness(0.15) contrast(3)' }}>{displayEmoji}</span>
+                  </div>
                   <span className="text-sm text-red-400/70">{def?.description || 'Штраф!'}</span>
                   {isNeutralized && <span className="text-base">🛡️</span>}
                   {isTriggered && !isNeutralized && <span className="text-base">🔥</span>}
