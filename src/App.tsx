@@ -1593,6 +1593,7 @@ function App() {
                         isTriggeredTrap={triggeredTrapIds.has(card.pairId)}
                         isSwapping={swappingIndices.has(index)}
                         isAnchored={roundModifiers.anchorNext}
+                        isTrapCard={trapPairIds.includes(card.pairId)}
                       />
                     </div>
                   );
@@ -1626,6 +1627,7 @@ function App() {
                     isTriggeredTrap={triggeredTrapIds.has(card.pairId)}
                     isSwapping={swappingIndices.has(index)}
                     isAnchored={roundModifiers.anchorNext}
+                    isTrapCard={trapPairIds.includes(card.pairId)}
                     isSectionBlocked={(() => {
                       if (roundCondition?.id !== 'sections') return false;
                       const cols = cards.length > 14 ? 6 : 4;
