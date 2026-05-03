@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Card from './components/Card';
 import ScorePanel, { Bonus } from './components/ScorePanel';
 import SpaceBackground from './components/SpaceBackground';
+import { submitScore, getTopScores, LeaderboardEntry } from './leaderboard';
 import './App.css';
 
 interface GameCard {
@@ -529,6 +530,9 @@ function App() {
   const [score, setScore] = useState(0); // total score across rounds
   const [showNameEntry, setShowNameEntry] = useState(false);
   const [playerName, setPlayerName] = useState('');
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
+  const [scoreSubmitted, setScoreSubmitted] = useState(false);
   const [trapPairIds, setTrapPairIds] = useState<string[]>([]);
   const [trapDefs, setTrapDefs] = useState<TrapDef[]>([]);
   const [markedTraps, setMarkedTraps] = useState<Set<number>>(new Set());
@@ -1534,9 +1538,21 @@ function App() {
     setTriggeredTrapIds(new Set());
     setShowNameEntry(false);
     setPlayerName('');
+    setScoreSubmitted(false);
     setShowIntro(false);
     if (freezeTimerRef.current) clearTimeout(freezeTimerRef.current);
   };
+
+  const openLeaderboard = useCallback(async () => {
+    setShowLeaderboard(true);
+    try {
+      const entries = await getTopScores(20);
+      setLeaderboardEntries(entries);
+    } catch {
+      // Firebase not configured or offline — show empty
+      setLeaderboardEntries([]);
+    }
+  }, []);
 
   // Backdoor: 6 clicks on Рекорд reveals all non-trap cards + grants bonuses
   const handleBackdoor = useCallback(() => {
@@ -1698,6 +1714,7 @@ function App() {
           onRestart={() => setShowRestartConfirm(true)}
           onBackdoor={handleBackdoor}
           onFAQ={() => setShowFAQ(true)}
+          onLeaderboard={openLeaderboard}
           onLongRightPress={() => setShowLevelSelect(true)}
           timerFrozen={timerFrozen}
           boardFrozen={boardFrozen}
@@ -2041,14 +2058,14 @@ function App() {
               <p className="text-yellow-300 text-2xl font-bold mb-4">
                 Итоговые очки: {score}
               </p>
-              {!showNameEntry ? (
+              {!scoreSubmitted && !showNameEntry ? (
                 <button
                   onClick={() => setShowNameEntry(true)}
                   className="px-8 py-3 bg-yellow-500 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition-all active:scale-95 mb-3"
                 >
                   Сохранить результат
                 </button>
-              ) : (
+              ) : showNameEntry ? (
                 <div className="mb-3">
                   <input
                     type="text"
@@ -2061,12 +2078,18 @@ function App() {
                   />
                   <br />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (playerName.trim()) {
-                        const records = JSON.parse(localStorage.getItem('memoryGameRecords') || '[]');
-                        records.push({ name: playerName.trim(), score, date: new Date().toISOString() });
-                        records.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
-                        localStorage.setItem('memoryGameRecords', JSON.stringify(records.slice(0, 100)));
+                        try {
+                          await submitScore({ name: playerName.trim(), score, level: MAX_LEVEL, bonusesCollected, trapsTriggered });
+                        } catch {
+                          // Fallback to localStorage if Firebase fails
+                          const records = JSON.parse(localStorage.getItem('memoryGameRecords') || '[]');
+                          records.push({ name: playerName.trim(), score, date: new Date().toISOString() });
+                          records.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
+                          localStorage.setItem('memoryGameRecords', JSON.stringify(records.slice(0, 100)));
+                        }
+                        setScoreSubmitted(true);
                         setShowNameEntry(false);
                         setPlayerName('');
                       }
@@ -2076,7 +2099,15 @@ function App() {
                     Сохранить
                   </button>
                 </div>
+              ) : (
+                <p className="text-green-300 mb-3 text-lg">✅ Результат сохранён!</p>
               )}
+              <button
+                onClick={openLeaderboard}
+                className="px-6 py-2 bg-purple-500 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition-all active:scale-95 mb-3"
+              >
+                🏆 Таблица рекордов
+              </button>
               <br />
               <button
                 onClick={handleRestart}
@@ -2103,14 +2134,14 @@ function App() {
               <p className="text-yellow-300 mb-6">
                 Очки: <span className="text-white font-bold">{score}</span>
               </p>
-              {!showNameEntry ? (
+              {!scoreSubmitted && !showNameEntry ? (
                 <button
                   onClick={() => setShowNameEntry(true)}
                   className="px-8 py-4 bg-yellow-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95 mb-3"
                 >
                   Сохранить результат
                 </button>
-              ) : (
+              ) : showNameEntry ? (
                 <div className="mb-3">
                   <input
                     type="text"
@@ -2123,12 +2154,17 @@ function App() {
                   />
                   <br />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (playerName.trim()) {
-                        const records = JSON.parse(localStorage.getItem('memoryGameRecords') || '[]');
-                        records.push({ name: playerName.trim(), score, date: new Date().toISOString() });
-                        records.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
-                        localStorage.setItem('memoryGameRecords', JSON.stringify(records.slice(0, 100)));
+                        try {
+                          await submitScore({ name: playerName.trim(), score, level, bonusesCollected, trapsTriggered });
+                        } catch {
+                          const records = JSON.parse(localStorage.getItem('memoryGameRecords') || '[]');
+                          records.push({ name: playerName.trim(), score, date: new Date().toISOString() });
+                          records.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
+                          localStorage.setItem('memoryGameRecords', JSON.stringify(records.slice(0, 100)));
+                        }
+                        setScoreSubmitted(true);
                         setShowNameEntry(false);
                         setPlayerName('');
                       }
@@ -2138,7 +2174,15 @@ function App() {
                     Сохранить
                   </button>
                 </div>
+              ) : (
+                <p className="text-green-300 mb-3 text-lg">✅ Результат сохранён!</p>
               )}
+              <button
+                onClick={openLeaderboard}
+                className="px-6 py-2 bg-purple-500 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition-all active:scale-95 mb-3"
+              >
+                🏆 Таблица рекордов
+              </button>
               <br />
               <button
                 onClick={handleRestart}
@@ -2146,6 +2190,49 @@ function App() {
               >
                 Попробовать снова
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Leaderboard Modal */}
+        {showLeaderboard && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn" onClick={() => setShowLeaderboard(false)}>
+            <div className="bg-gradient-to-br from-indigo-800 to-purple-900 rounded-3xl p-6 shadow-2xl border border-yellow-400/30 max-w-lg w-full mx-4 animate-bounceIn max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <h2 className="text-2xl font-bold text-center mb-4 text-yellow-300">🏆 Таблица рекордов</h2>
+              {leaderboardEntries.length === 0 ? (
+                <p className="text-center text-indigo-300 py-8">Пока нет результатов. Станьте первым!</p>
+              ) : (
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-indigo-300 text-sm border-b border-indigo-500/30">
+                      <th className="py-2 pr-2">#</th>
+                      <th className="py-2">Имя</th>
+                      <th className="py-2 text-right">Очки</th>
+                      <th className="py-2 text-right">Ур.</th>
+                      <th className="py-2 text-right hidden sm:table-cell">Дата</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboardEntries.map((entry, i) => (
+                      <tr key={i} className={`border-b border-indigo-500/10 ${i === 0 ? 'text-yellow-300' : i === 1 ? 'text-gray-300' : i === 2 ? 'text-amber-600' : 'text-indigo-100'}`}>
+                        <td className="py-2 pr-2 font-bold">{i + 1}</td>
+                        <td className="py-2 font-medium">{entry.name}</td>
+                        <td className="py-2 text-right font-mono font-bold">{entry.score}</td>
+                        <td className="py-2 text-right">{entry.level}</td>
+                        <td className="py-2 text-right text-xs hidden sm:table-cell text-indigo-300">{new Date(entry.date).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="text-center mt-4">
+                <button
+                  onClick={() => setShowLeaderboard(false)}
+                  className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:scale-105 transition-all active:scale-95"
+                >
+                  Закрыть
+                </button>
+              </div>
             </div>
           </div>
         )}

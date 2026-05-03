@@ -30,6 +30,7 @@ interface ScorePanelProps {
   onRestart: () => void;
   onBackdoor: () => void;
   onFAQ: () => void;
+  onLeaderboard: () => void;
   onLongRightPress?: () => void;
   timerFrozen: boolean;
   boardFrozen: boolean;
@@ -44,6 +45,7 @@ const ScorePanel: React.FC<ScorePanelProps> = ({
   onRestart,
   onBackdoor,
   onFAQ,
+  onLeaderboard,
   onLongRightPress,
   timerFrozen,
   boardFrozen,
@@ -117,6 +119,14 @@ const ScorePanel: React.FC<ScorePanelProps> = ({
             <div className="text-xs text-yellow-300 uppercase">Рекорд</div>
             <div className="text-lg sm:text-xl font-bold text-yellow-300">{score}</div>
           </div>
+          <button
+            data-testid="leaderboard-btn"
+            onClick={onLeaderboard}
+            className="text-center bg-yellow-500/20 px-2 sm:px-3 py-1 rounded-lg border border-yellow-400/40 cursor-pointer select-none hover:scale-105 transition-all active:scale-95"
+          >
+            <div className="text-xs text-yellow-300 uppercase">Топ</div>
+            <div className="text-lg sm:text-xl font-bold text-yellow-300">🏆</div>
+          </button>
           <button
             data-testid="faq-btn"
             onClick={onFAQ}
