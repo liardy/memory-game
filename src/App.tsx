@@ -1398,8 +1398,8 @@ function App() {
               grantBonus(matchedPairId);
               setAvailableBonuses(prev => prev.filter(e => e !== matchedPairId));
               setBonusesCollected(prev => prev + 1);
-            } else if (bonusMap[matchedPairId] && availableBonuses.length > 0) {
-              // This pair was a bonus pair but its bonus was already collected/lost — lose the top available bonus
+            } else if (availableBonuses.length > 0) {
+              // Normal pair matched (not a trap, not a bonus) — lose the top available bonus
               const lostEmoji = availableBonuses[0];
               const lostBonus = bonusMap[lostEmoji];
               console.log(`[BONUS LOST] lost=${lostEmoji} bonus=${lostBonus?.name}`);
@@ -1525,7 +1525,7 @@ function App() {
         }
       }
     },
-    [cards, flippedCards, isActive, gameWon, gameOver, boardFrozen, trapPairIds, bonusMap, grantBonus, roundModifiers, markedTraps, trapDefs, roundCondition, sectionPhase, cardsOpenedInPhase, failCounter]
+    [cards, flippedCards, isActive, gameWon, gameOver, boardFrozen, trapPairIds, bonusMap, grantBonus, availableBonuses, roundModifiers, markedTraps, trapDefs, roundCondition, sectionPhase, cardsOpenedInPhase, failCounter]
   );
 
   const handleRestart = () => {
