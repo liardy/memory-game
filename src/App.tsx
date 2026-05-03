@@ -2085,15 +2085,7 @@ function App() {
                   <button
                     onClick={async () => {
                       if (playerName.trim()) {
-                        try {
-                          await submitScore({ name: playerName.trim(), score, level: MAX_LEVEL, bonusesCollected, trapsTriggered });
-                        } catch {
-                          // Fallback to localStorage if Firebase fails
-                          const records = JSON.parse(localStorage.getItem('memoryGameRecords') || '[]');
-                          records.push({ name: playerName.trim(), score, date: new Date().toISOString() });
-                          records.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
-                          localStorage.setItem('memoryGameRecords', JSON.stringify(records.slice(0, 100)));
-                        }
+                        await submitScore({ name: playerName.trim(), score, level: MAX_LEVEL, bonusesCollected, trapsTriggered });
                         setScoreSubmitted(true);
                         setShowNameEntry(false);
                         setPlayerName('');
@@ -2161,14 +2153,7 @@ function App() {
                   <button
                     onClick={async () => {
                       if (playerName.trim()) {
-                        try {
-                          await submitScore({ name: playerName.trim(), score, level, bonusesCollected, trapsTriggered });
-                        } catch {
-                          const records = JSON.parse(localStorage.getItem('memoryGameRecords') || '[]');
-                          records.push({ name: playerName.trim(), score, date: new Date().toISOString() });
-                          records.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
-                          localStorage.setItem('memoryGameRecords', JSON.stringify(records.slice(0, 100)));
-                        }
+                        await submitScore({ name: playerName.trim(), score, level, bonusesCollected, trapsTriggered });
                         setScoreSubmitted(true);
                         setShowNameEntry(false);
                         setPlayerName('');
