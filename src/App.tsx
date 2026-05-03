@@ -539,6 +539,7 @@ function App() {
     setBonusMap(setup.bonusMap);
     setBonusOrder(setup.bonusOrder);
     setAvailableBonuses([...setup.bonusOrder]);
+    grantedRef.current = new Set();
     setTrapPairIds(setup.trapPairIds);
     setTrapDefs(setup.trapDefs);
     setTrapsTriggered(0);
@@ -754,9 +755,14 @@ function App() {
     trapMsgTimerRef.current = setTimeout(() => setTrapMessage(''), 3000);
   };
 
+  const grantedRef = useRef<Set<string>>(new Set());
+
   const grantBonus = useCallback((pairId: string) => {
     const bonusDef = bonusMap[pairId];
     if (!bonusDef) return;
+    // Guard against double-granting (e.g. React double invoke)
+    if (grantedRef.current.has(pairId)) return;
+    grantedRef.current.add(pairId);
 
     // Find display emoji for this pairId (for level 8, display differs from pairId)
     const displayEmoji = cards.find(c => c.pairId === pairId)?.emoji || pairId;
