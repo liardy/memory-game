@@ -7,6 +7,7 @@ import './App.css';
 interface GameCard {
   id: number;
   emoji: string;
+  pairId: string; // stable identity for bonus/trap/match, separate from display emoji
   isFlipped: boolean;
   isMatched: boolean;
   isWrong?: boolean;
@@ -14,10 +15,31 @@ interface GameCard {
   rotation?: number; // 0, 90, 180, 270 for round condition level 13
   colorIndex?: number; // for level 8 color matching
   contentHidden?: boolean; // hideOpenCards trap: card stays flipped but emoji is hidden
+  isBlurred?: boolean; // blur trap: card stays blurred even when flipped back
 }
 
 // All available emojis (16 for variety across levels)
 const ALL_EMOJIS = ['🚀', '🌟', '🪐', '👽', '🌙', '☄️', '🛸', '🌌', '🔮', '🎭', '🦄', '🐉', '🦋', '🌺', '🍄', '⚡', '🎃', '🎯', '🦊'];
+
+// Fixed mapping: each card emoji always gives the same bonus
+const EMOJI_BONUS_MAP: Record<string, Bonus> = {
+  '🚀': { id: 'timer10', emoji: '⏳', name: 'Песочные часы', description: '+10 секунд к таймеру', count: 0 },
+  '🌟': { id: 'sticky5', emoji: '📌', name: 'Прилипала', description: '5 сек карточки не закрываются', count: 0 },
+  '🪐': { id: 'autopair', emoji: '🪐', name: 'Планета', description: 'Открывает случайную пару', count: 0 },
+  '👽': { id: 'xray', emoji: '👁️', name: 'Рентген', description: 'На 0.5 сек показывает все карточки', count: 0 },
+  '🌙': { id: 'autoshield', emoji: '🛡️', name: 'Автозащита', description: 'При таймере 0:00 добавит 10 сек', count: 0 },
+  '☄️': { id: 'anchor', emoji: '⚓', name: 'Якорь', description: 'Следующая карта не перемещается', count: 0 },
+  '🛸': { id: 'freeze', emoji: '❄️', name: 'Заморозка', description: '10 сек: таймер и всё заморожено', count: 0 },
+  '🌌': { id: 'superpos', emoji: '🔮', name: 'Суперпозиция', description: 'Следующая карта остаётся открытой', count: 0 },
+  '🔮': { id: 'microblast', emoji: '💥', name: 'Микровзрыв', description: 'Открывает карту + 4 соседних', count: 0 },
+  '🎭': { id: 'canceltrap', emoji: '🚫', name: 'Анти-ловушка', description: 'Отменяет текущую/следующую ловушку', count: 0 },
+  '🦄': { id: 'trapglow', emoji: '🔦', name: 'Детектор', description: 'На 0.5 сек подсвечивает ловушки', count: 0 },
+  '🐉': { id: 'silhouettes', emoji: '🎭', name: 'Силуэты', description: 'На 3 сек показывает силуэты всех карт', count: 0 },
+  '🦋': { id: 'sort', emoji: '📊', name: 'Сортировка', description: 'Собранные пары перемещаются вверх', count: 0 },
+  '🌺': { id: 'show3pairs', emoji: '💡', name: 'Подсказка', description: 'На 1 сек показывает 3 случайные пары', count: 0 },
+  '🍄': { id: 'pause', emoji: '⏸️', name: 'Пауза', description: 'Останавливает игру, чтобы подумать', count: 0 },
+  '⚡': { id: 'doublepoints', emoji: '✨', name: 'Двойные очки', description: '10 сек: удваивает очки за пары', count: 0 },
+};
 
 // Level definitions — 16 levels, gradual progression
 interface LevelConfig {
@@ -28,45 +50,26 @@ interface LevelConfig {
 }
 
 const LEVELS: LevelConfig[] = [
-  { pairs: 4, time: 60, bonusCount: 2, trapCount: 1 },   // 1
-  { pairs: 5, time: 65, bonusCount: 2, trapCount: 1 },   // 2
-  { pairs: 6, time: 70, bonusCount: 2, trapCount: 1 },   // 3
-  { pairs: 7, time: 75, bonusCount: 3, trapCount: 1 },   // 4
-  { pairs: 8, time: 80, bonusCount: 3, trapCount: 2 },   // 5
-  { pairs: 9, time: 85, bonusCount: 3, trapCount: 2 },   // 6
-  { pairs: 10, time: 90, bonusCount: 4, trapCount: 2 },  // 7
-  { pairs: 11, time: 95, bonusCount: 4, trapCount: 2 },  // 8
-  { pairs: 12, time: 100, bonusCount: 4, trapCount: 3 }, // 9
-  { pairs: 13, time: 105, bonusCount: 4, trapCount: 3 }, // 10
-  { pairs: 14, time: 110, bonusCount: 5, trapCount: 3 }, // 11
-  { pairs: 15, time: 115, bonusCount: 5, trapCount: 3 }, // 12
-  { pairs: 16, time: 120, bonusCount: 5, trapCount: 3 }, // 13
-  { pairs: 17, time: 125, bonusCount: 5, trapCount: 3 }, // 14
-  { pairs: 18, time: 130, bonusCount: 5, trapCount: 3 }, // 15 — 6x6 grid for shiftLine
-  { pairs: 10, time: 120, bonusCount: 5, trapCount: 3 }, // 16 — 20 cards, 2 min
+  { pairs: 4, time: 60, bonusCount: 1, trapCount: 1 },    // 1
+  { pairs: 5, time: 65, bonusCount: 1, trapCount: 1 },    // 2
+  { pairs: 6, time: 70, bonusCount: 2, trapCount: 1 },    // 3
+  { pairs: 7, time: 75, bonusCount: 2, trapCount: 1 },    // 4
+  { pairs: 8, time: 80, bonusCount: 3, trapCount: 2 },    // 5
+  { pairs: 9, time: 85, bonusCount: 3, trapCount: 2 },    // 6
+  { pairs: 10, time: 90, bonusCount: 3, trapCount: 2 },   // 7
+  { pairs: 12, time: 100, bonusCount: 0, trapCount: 0 },  // 8 — color match, no bonuses or traps
+  { pairs: 13, time: 105, bonusCount: 3, trapCount: 3 },  // 9
+  { pairs: 14, time: 110, bonusCount: 3, trapCount: 3 },  // 10
+  { pairs: 15, time: 115, bonusCount: 3, trapCount: 3 },  // 11
+  { pairs: 16, time: 120, bonusCount: 3, trapCount: 3 },  // 12
+  { pairs: 17, time: 125, bonusCount: 3, trapCount: 3 },  // 13
+  { pairs: 18, time: 130, bonusCount: 3, trapCount: 3 },  // 14
+  { pairs: 18, time: 130, bonusCount: 3, trapCount: 3 },  // 15 — 6x6 grid for shiftLine
+  { pairs: 10, time: 120, bonusCount: 0, trapCount: 3 },  // 16 — 20 cards, no bonuses!
 ];
 
 const MAX_LEVEL = LEVELS.length;
 
-// Bonus types — 16 unique bonuses
-const BONUS_TYPES: Bonus[] = [
-  { id: 'timer10', emoji: '⏳', name: 'Песочные часы', description: '+10 секунд к таймеру', count: 0 },
-  { id: 'sticky5', emoji: '📌', name: 'Прилипала', description: '5 сек карточки не закрываются', count: 0 },
-  { id: 'xray', emoji: '�️', name: 'Рентген', description: 'На 0.5 сек показывает все карточки', count: 0 },
-  { id: 'autoshield', emoji: '🛡️', name: 'Автозащита', description: 'При таймере 0:00 добавит 10 сек', count: 0 },
-  { id: 'anchor', emoji: '⚓', name: 'Якорь', description: 'Следующая карта не перемещается', count: 0 },
-  { id: 'autopair', emoji: '🪐', name: 'Планета', description: 'Открывает случайную пару', count: 0 },
-  { id: 'freeze', emoji: '❄️', name: 'Заморозка', description: '10 сек: таймер и всё заморожено', count: 0 },
-  { id: 'superpos', emoji: '🔮', name: 'Суперпозиция', description: 'Следующая карта остаётся открытой', count: 0 },
-  { id: 'microblast', emoji: '💥', name: 'Микровзрыв', description: 'Открывает карту + 4 соседних', count: 0 },
-  { id: 'canceltrap', emoji: '🚫', name: 'Анти-ловушка', description: 'Отменяет текущую/следующую ловушку', count: 0 },
-  { id: 'trapglow', emoji: '🔦', name: 'Детектор', description: 'На 0.5 сек подсвечивает ловушки', count: 0 },
-  { id: 'silhouettes', emoji: '🎭', name: 'Силуэты', description: 'На 3 сек показывает силуэты всех карт', count: 0 },
-  { id: 'sort', emoji: '📊', name: 'Сортировка', description: 'Собранные пары перемещаются вверх', count: 0 },
-  { id: 'show3pairs', emoji: '💡', name: 'Подсказка', description: 'На 1 сек показывает 3 случайные пары', count: 0 },
-  { id: 'pause', emoji: '⏸️', name: 'Пауза', description: 'Останавливает игру, чтобы подумать', count: 0 },
-  { id: 'doublepoints', emoji: '✨', name: 'Двойные очки', description: '10 сек: удваивает очки за пары', count: 0 },
-];
 
 // Trap types
 interface TrapDef {
@@ -271,10 +274,10 @@ const TRAP_BLOCK_3: TrapDef[] = [
     apply: ({ setCards, showTrapMessage }) => {
       showTrapMessage('🔄 Закрытие! 2 собранные пары закрылись!');
       setCards(prev => {
-        // Find unique matched emojis (each pair)
-        const matchedEmojis = [...new Set(prev.filter(c => c.isMatched).map(c => c.emoji))];
-        const toCloseEmojis = shuffleArray(matchedEmojis).slice(0, Math.min(2, matchedEmojis.length));
-        return prev.map(c => toCloseEmojis.includes(c.emoji) && c.isMatched
+        // Find unique matched pairIds (each pair)
+        const matchedPairIds = [...new Set(prev.filter(c => c.isMatched).map(c => c.pairId))];
+        const toClosePairIds = shuffleArray(matchedPairIds).slice(0, Math.min(2, matchedPairIds.length));
+        return prev.map(c => toClosePairIds.includes(c.pairId) && c.isMatched
           ? { ...c, isMatched: false, isFlipped: false }
           : c
         );
@@ -343,10 +346,10 @@ interface RoundCondition {
 }
 
 const ROUND_CONDITIONS: RoundCondition[] = [
-  { id: 'colorMatch', name: 'ЦветовоеMatching', emoji: '🎨', description: 'Все карточки одинаковые (цифра 8), но разного цвета. Собирайте пары по цвету: от холодного к тёплому оттенку!', level: 8 },
-  { id: 'jumpPair', name: 'Прыгающие пары', emoji: '🦘', description: 'Собранные пары перепрыгивают на одну ячейку в случайную сторону!', level: 9 },
-  { id: 'changePast', name: 'Изменение прошлого', emoji: '🔮', description: 'При каждом открытии карточки, прошлые открытые карточки меняют картинку на случайную!', level: 10 },
-  { id: 'floating', name: 'Свободное плавание', emoji: '🌀', description: 'Все карточки не привязаны к сетке, а бесконечно плавают и перемешиваются!', level: 11 },
+  { id: 'colorMatch', name: 'ЦветовоеMatching', emoji: '🎨', description: 'На карточках только цвета — собирайте пары по цвету! Ловушек и новых бонусов нет.', level: 8 },
+  { id: 'jumpPair', name: 'Прыгающие пары', emoji: '🦘', description: 'Собранные пары прыгают как кролик и перепрыгивают на соседнюю ячейку!', level: 9 },
+  { id: 'trapShift', name: 'Блуждающие ловушки', emoji: '🔮', description: 'Невозможно отметить ловушки! Каждые 10 сек ловушки меняются местами со случайными закрытыми картами.', level: 10 },
+  { id: 'floating', name: 'Свободное плавание', emoji: '🌀', description: 'Карточки расположены хаотичным облаком и плавно вращаются по часовой стрелке!', level: 11 },
   { id: 'sections', name: 'Секции', emoji: '🧩', description: 'Поле поделено на 4 секции. В чётных можно выбирать, в нечётных — заблокировано. После каждых 3 карточек секции меняются!', level: 12 },
   { id: 'rotated', name: 'Повороты', emoji: '🔄', description: 'Все картинки на карточках случайно повёрнуты на 90°, 180° или 270°!', level: 13 },
   { id: 'mirror', name: 'Зеркало', emoji: '🪞', description: 'После каждой собранной пары поле отражается по вертикали или горизонтали!', level: 14 },
@@ -367,32 +370,45 @@ function shuffleArray<T>(array: T[]): T[] {
 function setupLevel(level: number): {
   cards: GameCard[];
   bonusMap: Record<string, Bonus>;
-  bonusOrder: string[]; // ordered emoji list for "top bonus lost" mechanic
-  trapEmojis: string[];
+  bonusOrder: string[]; // ordered pairId list for "top bonus lost" mechanic
+  trapPairIds: string[];
   trapDefs: TrapDef[];
 } {
   const config = LEVELS[Math.min(level - 1, LEVELS.length - 1)];
   const pairCount = config.pairs;
 
-  // Level 8: color matching — all cards show "8" but have different colors
+  // Level 8: color matching — cards show only color, no emoji, no traps
   const isColorMatch = level === 8;
 
-  const selectedEmojis = isColorMatch
-    ? Array(pairCount).fill('8️⃣')
-    : shuffleArray(ALL_EMOJIS).slice(0, pairCount);
+  // Select unique pair IDs (always unique, used for bonus/trap/match identity)
+  const pairIds = shuffleArray(ALL_EMOJIS).slice(0, pairCount);
 
-  // Assign a bonus to every pair — shuffle bonus types and assign in order
-  const shuffledBonusTypes = shuffleArray([...BONUS_TYPES]);
+  // Display emoji: for level 8 show empty (color only), otherwise same as pairId
+  const displayEmojis = isColorMatch
+    ? Array(pairCount).fill('')
+    : [...pairIds];
+
+  // Assign bonuses to bonusCount pairs using fixed mapping (by pairId)
+  const bonusKeys = shuffleArray(Object.keys(EMOJI_BONUS_MAP));
+  const selectedBonuses = bonusKeys.slice(0, config.bonusCount);
+  const shuffledPairIds = shuffleArray([...pairIds]);
+  const bonusPairIds: string[] = [];
   const bonusMap: Record<string, Bonus> = {};
   const bonusOrder: string[] = [];
-  selectedEmojis.forEach((emoji, i) => {
-    const bonusType = shuffledBonusTypes[i % shuffledBonusTypes.length];
-    bonusMap[emoji] = { ...bonusType, count: 0 };
-    bonusOrder.push(emoji);
+  selectedBonuses.forEach((bonusKey, i) => {
+    const pairId = shuffledPairIds[i];
+    const fixedBonus = EMOJI_BONUS_MAP[bonusKey];
+    if (fixedBonus && pairId) {
+      bonusMap[pairId] = { ...fixedBonus, count: 0 };
+      bonusOrder.push(pairId);
+      bonusPairIds.push(pairId);
+    }
   });
 
-  // Pick trap emojis (can overlap with bonuses now — traps are separate mechanic)
-  const trapEmojis = shuffleArray([...selectedEmojis]).slice(0, config.trapCount);
+  // Pick trap pairIds (from non-bonus pairs) — level 8 has no traps
+  const bonusPairIdSet = new Set(bonusPairIds);
+  const nonBonusPairIds = pairIds.filter(id => !bonusPairIdSet.has(id));
+  const trapPairIds = isColorMatch ? [] : shuffleArray(nonBonusPairIds).slice(0, config.trapCount);
 
   // Assign trap types based on level blocks
   // 1-4: 1 from block 1
@@ -405,18 +421,18 @@ function setupLevel(level: number): {
   else if (level <= 12) blockSources = [1, 2, 3];
   else blockSources = [2, 3, 4];
 
-  const trapDefs = trapEmojis.map((_, i) => {
+  const trapDefs = trapPairIds.map((_, i) => {
     const blockIdx = blockSources[i % blockSources.length] - 1;
     const block = TRAP_BLOCKS[blockIdx];
     return block[Math.floor(Math.random() * block.length)];
   });
 
-  const cards = selectedEmojis.flatMap((emoji, index) => [
-    { id: index * 2, emoji, isFlipped: false, isMatched: false, isWrong: false, isHinted: false, contentHidden: false, colorIndex: isColorMatch ? index : undefined },
-    { id: index * 2 + 1, emoji, isFlipped: false, isMatched: false, isWrong: false, isHinted: false, contentHidden: false, colorIndex: isColorMatch ? index : undefined },
+  const cards = pairIds.flatMap((pairId, index) => [
+    { id: index * 2, emoji: displayEmojis[index], pairId, isFlipped: false, isMatched: false, isWrong: false, isHinted: false, contentHidden: false, isBlurred: false, colorIndex: isColorMatch ? index : undefined },
+    { id: index * 2 + 1, emoji: displayEmojis[index], pairId, isFlipped: false, isMatched: false, isWrong: false, isHinted: false, contentHidden: false, isBlurred: false, colorIndex: isColorMatch ? index : undefined },
   ]);
 
-  return { cards: shuffleArray(cards), bonusMap, bonusOrder, trapEmojis, trapDefs };
+  return { cards: shuffleArray(cards), bonusMap, bonusOrder, trapPairIds, trapDefs };
 }
 
 function App() {
@@ -435,11 +451,12 @@ function App() {
   void bonusOrder;
   const [availableBonuses, setAvailableBonuses] = useState<string[]>([]); // emojis still available to collect
   const [trapsTriggered, setTrapsTriggered] = useState(0); // count of traps triggered this round
+  const [triggeredTrapIds, setTriggeredTrapIds] = useState<Set<string>>(new Set()); // which trap pairIds have been triggered
   const [bonusesCollected, setBonusesCollected] = useState(0); // count of bonuses collected this round
   const [score, setScore] = useState(0); // total score across rounds
   const [showNameEntry, setShowNameEntry] = useState(false);
   const [playerName, setPlayerName] = useState('');
-  const [trapEmojis, setTrapEmojis] = useState<string[]>([]);
+  const [trapPairIds, setTrapPairIds] = useState<string[]>([]);
   const [trapDefs, setTrapDefs] = useState<TrapDef[]>([]);
   const [markedTraps, setMarkedTraps] = useState<Set<number>>(new Set());
   const [roundModifiers, setRoundModifiers] = useState<RoundModifiers>({ ...DEFAULT_MODIFIERS });
@@ -460,6 +477,11 @@ function App() {
   const [backdoorClicks, setBackdoorClicks] = useState(0);
   // backdoorClicks is used implicitly via setBackdoorClicks
   void backdoorClicks;
+  const [showLevelSelect, setShowLevelSelect] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [swappingIndices, setSwappingIndices] = useState<Set<number>>(new Set());
+  const pendingSwapRef = useRef<(() => void) | null>(null);
+  const [trapShiftCountdown, setTrapShiftCountdown] = useState<number | null>(null);
   const backdoorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const freezeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bonusMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -474,10 +496,10 @@ function App() {
     setBonusMap(setup.bonusMap);
     setBonusOrder(setup.bonusOrder);
     setAvailableBonuses([...setup.bonusOrder]);
-    setTrapEmojis(setup.trapEmojis);
+    setTrapPairIds(setup.trapPairIds);
     setTrapDefs(setup.trapDefs);
     setTrapsTriggered(0);
-    setBonusesCollected(0);
+    setTriggeredTrapIds(new Set());
     setMarkedTraps(new Set());
     setRoundModifiers({ ...DEFAULT_MODIFIERS });
     setFlippedCards([]);
@@ -544,12 +566,60 @@ function App() {
     return () => clearInterval(interval);
   }, [isActive, gameWon, gameOver, timerFrozen, roundModifiers.timerSpeed]);
 
+  // Level 10: trapShift — every 10s, unopened trap cards swap with random unopened non-trap cards
+  const cardsRef = useRef(cards);
+  cardsRef.current = cards;
+
+  useEffect(() => {
+    if (roundCondition?.id !== 'trapShift' || !isActive || gameWon || gameOver) {
+      setTrapShiftCountdown(null);
+      return;
+    }
+    setTrapShiftCountdown(10);
+    const countdownInterval = setInterval(() => {
+      setTrapShiftCountdown(prev => prev !== null && prev > 1 ? prev - 1 : 10);
+    }, 1000);
+    const swapInterval = setInterval(() => {
+      const currentCards = cardsRef.current;
+      const trapIndices = currentCards.map((c, i) => ({ c, i }))
+        .filter(x => !x.c.isFlipped && !x.c.isMatched && trapPairIds.includes(x.c.pairId))
+        .map(x => x.i);
+      if (trapIndices.length === 0) return;
+
+      const nonTrapIndices = currentCards.map((c, i) => ({ c, i }))
+        .filter(x => !x.c.isFlipped && !x.c.isMatched && !trapPairIds.includes(x.c.pairId))
+        .map(x => x.i);
+      if (nonTrapIndices.length === 0) return;
+
+      const trapIdx = trapIndices[Math.floor(Math.random() * trapIndices.length)];
+      const nonTrapIdx = nonTrapIndices[Math.floor(Math.random() * nonTrapIndices.length)];
+
+      // Start swap animation: shrink → swap → grow
+      setSwappingIndices(new Set([trapIdx, nonTrapIdx]));
+      pendingSwapRef.current = () => {
+        setCards(prev => {
+          const result = [...prev];
+          const temp = { ...result[trapIdx] };
+          result[trapIdx] = { ...result[nonTrapIdx] };
+          result[nonTrapIdx] = temp;
+          return result;
+        });
+        showBonusMsg('🔮 Ловушки переместились!');
+      };
+      setTrapShiftCountdown(10);
+    }, 10000);
+    return () => {
+      clearInterval(countdownInterval);
+      clearInterval(swapInterval);
+    };
+  }, [roundCondition?.id, isActive, gameWon, gameOver, trapPairIds]);
+
   // Check win condition (level complete) — when all non-trap pairs are matched
   useEffect(() => {
     if (cards.length === 0 || levelCompleting) return;
     // All non-trap cards must be matched; trap cards are never opened
     const allNonTrapMatched = cards.every((card) =>
-      card.isMatched || trapEmojis.includes(card.emoji)
+      card.isMatched || trapPairIds.includes(card.pairId)
     );
     if (allNonTrapMatched && !gameWon && !gameOver) {
       setLevelCompleting(true);
@@ -557,27 +627,43 @@ function App() {
 
       // Auto-mark trap cards as matched (they stay face-down but count as done)
       setCards(prev => prev.map(card =>
-        trapEmojis.includes(card.emoji) ? { ...card, isMatched: true } : card
+        trapPairIds.includes(card.pairId) ? { ...card, isMatched: true } : card
       ));
 
       // Just show info about unmarked traps (they already fired during gameplay)
-      const unmarkedTraps = trapEmojis.filter((trapEmoji) => {
+      const unmarkedTraps = trapPairIds.filter((trapPairId) => {
         const trapCardIndices = cards
           .map((card, i) => ({ card, i }))
-          .filter(c => c.card.emoji === trapEmoji)
+          .filter(c => c.card.pairId === trapPairId)
           .map(c => c.i);
         return !trapCardIndices.every(idx => markedTraps.has(idx));
       });
 
       if (unmarkedTraps.length > 0) {
         showTrapMsg(`⚠️ ${unmarkedTraps.length} непомеченн${unmarkedTraps.length === 1 ? 'ая' : unmarkedTraps.length < 5 ? 'ые' : 'ых'} ловушк${unmarkedTraps.length === 1 ? 'а' : unmarkedTraps.length < 5 ? 'и' : 'ок'} сработали!`);
-      } else if (trapEmojis.length > 0) {
+      } else if (trapPairIds.length > 0) {
         showBonusMsg('🛡️ Все ловушки нейтрализованы пометками!');
       }
 
       completeLevel();
     }
-  }, [cards, gameWon, gameOver, trapEmojis, trapDefs, markedTraps, levelCompleting]);
+  }, [cards, gameWon, gameOver, trapPairIds, trapDefs, markedTraps, levelCompleting]);
+
+  // Swap animation: shrink → swap → grow
+  // When swappingIndices is set, cards shrink. After 500ms, the actual swap happens and indices clear (cards grow back).
+  // When swappingIndices becomes empty and there was a pending swap, play grow animation via CSS transition.
+
+  // Execute pending swap after shrink completes (500ms)
+  useEffect(() => {
+    if (swappingIndices.size > 0 && pendingSwapRef.current) {
+      const timer = setTimeout(() => {
+        pendingSwapRef.current!();
+        pendingSwapRef.current = null;
+        setSwappingIndices(new Set()); // triggers grow
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [swappingIndices]);
 
   const completeLevel = () => {
     // Calculate round score: remaining seconds × (bonuses - traps), minimum multiplier 1
@@ -616,24 +702,28 @@ function App() {
     trapMsgTimerRef.current = setTimeout(() => setTrapMessage(''), 3000);
   };
 
-  const grantBonus = useCallback((emoji: string) => {
-    const bonusDef = bonusMap[emoji];
+  const grantBonus = useCallback((pairId: string) => {
+    const bonusDef = bonusMap[pairId];
     if (!bonusDef) return;
+
+    // Find display emoji for this pairId (for level 8, display differs from pairId)
+    const displayEmoji = cards.find(c => c.pairId === pairId)?.emoji || pairId;
 
     setBonuses(prev => {
       const existing = prev.find(b => b.id === bonusDef.id);
       if (existing) {
         return prev.map(b => b.id === bonusDef.id ? { ...b, count: b.count + 1 } : b);
       }
-      return [...prev, { ...bonusDef, count: 1 }];
+      return [...prev, { ...bonusDef, count: 1, cardEmoji: displayEmoji }];
     });
-    showBonusMsg(`${bonusDef.emoji} Бонус получен: ${bonusDef.name}!`);
-  }, [bonusMap]);
+    showBonusMsg(`Бонус получен: ${bonusDef.name}!`);
+  }, [bonusMap, cards]);
 
-  // Right-click to mark/unmark a card as trap
+  // Right-click to mark/unmark a card as trap (disabled in round 10 — trapShift)
   const handleRightClick = useCallback((index: number, e: React.MouseEvent) => {
     e.preventDefault();
     if (gameOver || gameWon || boardFrozen) return;
+    if (roundCondition?.id === 'trapShift') return; // cannot mark traps in round 10
     if (cards[index].isFlipped || cards[index].isMatched) return;
 
     setMarkedTraps(prev => {
@@ -641,11 +731,13 @@ function App() {
       if (next.has(index)) {
         next.delete(index);
       } else {
+        // Limit marks to number of trap cards (trapPairIds.length * 2)
+        if (next.size >= trapPairIds.length * 2) return prev;
         next.add(index);
       }
       return next;
     });
-  }, [cards, gameOver, gameWon, boardFrozen]);
+  }, [cards, gameOver, gameWon, boardFrozen, trapPairIds]);
 
   const handleUseBonus = useCallback((bonusId: string) => {
     setBonuses(prev => {
@@ -742,7 +834,7 @@ function App() {
         case 'trapglow': {
           // Highlight trap cards for 0.5s
           setCards(prev => prev.map((c) =>
-            trapEmojis.includes(c.emoji) && !c.isMatched ? { ...c, isHinted: true } : c
+            trapPairIds.includes(c.pairId) && !c.isMatched ? { ...c, isHinted: true } : c
           ));
           showBonusMsg('🔦 Детектор! Ловушки подсвечены на 0.5 сек!');
           setTimeout(() => {
@@ -813,7 +905,7 @@ function App() {
       }
       return newBonuses;
     });
-  }, [trapEmojis, cards, showBonusMsg]);
+  }, [trapPairIds, cards, showBonusMsg]);
 
   const handleCardClick = useCallback(
     (index: number) => {
@@ -889,6 +981,9 @@ function App() {
       newCards[index].isFlipped = true;
       newCards[index].isWrong = false;
       newCards[index].contentHidden = false;
+      if (roundModifiers.blurCount > 0) {
+        newCards[index].isBlurred = true;
+      }
       setCards(newCards);
 
       // Decrement blur count
@@ -909,18 +1004,8 @@ function App() {
         }
       }
 
-      // Level 10: change past — when opening a card, previously flipped unmatched cards get random images
-      if (roundCondition?.id === 'changePast' && newFlipped.length === 1) {
-        setCards(prev => {
-          const otherFlipped = prev.map((c, i) => ({ c, i }))
-            .filter(x => x.i !== index && x.c.isFlipped && !x.c.isMatched);
-          if (otherFlipped.length === 0) return prev;
-          // Change one random past opened card's emoji
-          const target = otherFlipped[Math.floor(Math.random() * otherFlipped.length)];
-          const randomEmoji = ALL_EMOJIS[Math.floor(Math.random() * ALL_EMOJIS.length)];
-          return prev.map((c, i) => i === target.i ? { ...c, emoji: randomEmoji } : c);
-        });
-      }
+      // Level 10: trapShift — cannot mark traps, traps swap with random unopened cards every 10s
+      // (handled by useEffect timer, see below)
 
       // Ghost mode: card shows for 0.5s then hides
       if (roundModifiers.ghostMode && !cards[index].isMatched) {
@@ -953,18 +1038,18 @@ function App() {
           if (t2) { clearTimeout(t2); hideContentTimersRef.current.delete(second); }
         }
 
-        // Level 8: match by colorIndex, not emoji
+        // Match by pairId (stable identity), or by colorIndex for level 8
         const isMatch = roundCondition?.id === 'colorMatch'
           ? cards[first].colorIndex === cards[second].colorIndex
-          : cards[first].emoji === cards[second].emoji;
+          : cards[first].pairId === cards[second].pairId;
 
         if (isMatch) {
-          const matchedEmoji = cards[first].emoji;
+          const matchedPairId = cards[first].pairId;
           const matchDelay = roundModifiers.slowOpen ? 1200 : roundModifiers.fastOpen ? 300 : 600;
           setTimeout(() => {
             setCards((prev) => {
               let updated = prev.map((card, i) =>
-                i === first || i === second ? { ...card, isMatched: true } : card
+                i === first || i === second ? { ...card, isMatched: true, isBlurred: false } : card
               );
 
               // Level 9: jumpPair — matched pair jumps one cell in random direction
@@ -976,6 +1061,7 @@ function App() {
                   { dr: 0, dc: 1 },  // right
                 ];
                 const cols = updated.length > 14 ? 6 : 4;
+                const swapPairs: [number, number][] = [];
                 [first, second].forEach(idx => {
                   const row = Math.floor(idx / cols);
                   const col = idx % cols;
@@ -984,12 +1070,25 @@ function App() {
                   const newCol = Math.max(0, Math.min(cols - 1, col + dir.dc));
                   const targetIdx = newRow * cols + newCol;
                   if (targetIdx !== idx && targetIdx < updated.length) {
-                    // Swap with target position
-                    const temp = { ...updated[targetIdx] };
-                    updated[targetIdx] = { ...updated[idx] };
-                    updated[idx] = temp;
+                    swapPairs.push([idx, targetIdx]);
                   }
                 });
+                if (swapPairs.length > 0) {
+                  const allSwapIndices = swapPairs.flat();
+                  // Defer the actual swap — first mark matched, then animate shrink, then swap + grow
+                  setSwappingIndices(new Set(allSwapIndices));
+                  pendingSwapRef.current = () => {
+                    setCards(prev => {
+                      const result = [...prev];
+                      swapPairs.forEach(([a, b]) => {
+                        const temp = { ...result[a] };
+                        result[a] = { ...result[b] };
+                        result[b] = temp;
+                      });
+                      return result;
+                    });
+                  };
+                }
               }
 
               // Level 14: mirror — reflect field after match
@@ -1030,23 +1129,24 @@ function App() {
             }
 
             // Check if it's a trap pair (traps are separate from bonuses now)
-            if (trapEmojis.includes(matchedEmoji)) {
-              const trapIdx = trapEmojis.indexOf(matchedEmoji);
+            if (trapPairIds.includes(matchedPairId)) {
+              const trapIdx = trapPairIds.indexOf(matchedPairId);
               const trapCardIndices = cards
                 .map((c, i) => ({ c, i }))
-                .filter(x => x.c.emoji === matchedEmoji)
+                .filter(x => x.c.pairId === matchedPairId)
                 .map(x => x.i);
               const bothMarked = trapCardIndices.every(idx => markedTraps.has(idx));
               if (bothMarked) {
-                showBonusMsg(`🛡️ Ловушка ${matchedEmoji} нейтрализована пометкой!`);
+                showBonusMsg(`🛡️ Ловушка нейтрализована пометкой!`);
               } else if (roundModifiers.cancelTrapNext) {
                 setRoundModifiers(prev => ({ ...prev, cancelTrapNext: false }));
-                showBonusMsg(`🚫 Анти-ловушка отменила ловушку ${matchedEmoji}!`);
+                showBonusMsg(`🚫 Анти-ловушка отменила ловушку!`);
               } else {
                 const trapDef = trapDefs[trapIdx];
                 if (trapDef) {
                   setTrapsTriggered(prev => prev + 1);
-                  showTrapMsg(`⚠️ Ловушка ${matchedEmoji}! ${trapDef.emoji} ${trapDef.name}: ${trapDef.description}`);
+                  setTriggeredTrapIds(prev => new Set(prev).add(matchedPairId));
+                  showTrapMsg(`⚠️ Ловушка! ${trapDef.emoji} ${trapDef.name}: ${trapDef.description}`);
                   trapDef.apply({
                     setCards,
                     setTimeLeft,
@@ -1061,13 +1161,11 @@ function App() {
                   });
                 }
               }
-            }
-
-            // Bonus mechanic: every pair has a bonus
-            if (availableBonuses.includes(matchedEmoji)) {
+              // Trap pairs don't interact with bonus mechanic — skip it
+            } else if (availableBonuses.includes(matchedPairId)) {
               // This pair's bonus is still available — collect it!
-              grantBonus(matchedEmoji);
-              setAvailableBonuses(prev => prev.filter(e => e !== matchedEmoji));
+              grantBonus(matchedPairId);
+              setAvailableBonuses(prev => prev.filter(e => e !== matchedPairId));
               setBonusesCollected(prev => prev + 1);
             } else if (availableBonuses.length > 0) {
               // This pair's bonus was already collected/lost — lose the top available bonus
@@ -1095,6 +1193,11 @@ function App() {
             showBonusMsg('⚓ Якорь! Карточка не перемещена!');
           }
 
+          // Reset superposNext after successful match (pair found)
+          if (roundModifiers.superposNext) {
+            setRoundModifiers(prev => ({ ...prev, superposNext: false }));
+          }
+
           // Reset fail counter on successful match
           failCounterRef.current = 0;
           setFailCounter(0);
@@ -1111,11 +1214,11 @@ function App() {
             return;
           }
 
-          // Superposition: first card stays open
+          // Superposition: first card stays open until its pair is found
           const superposActive = roundModifiers.superposNext;
           if (superposActive) {
-            setRoundModifiers(prev => ({ ...prev, superposNext: false }));
             showBonusMsg('🔮 Суперпозиция! Карточка остаётся открытой!');
+            // Don't reset superposNext yet — keep it active until pair is found
           }
 
           const wrongDelay = roundModifiers.slowOpen ? 1500 : roundModifiers.fastOpen ? 600 : 1000;
@@ -1140,7 +1243,7 @@ function App() {
           let shiftType = '';
           setTimeout(() => {
             setCards((prev) => {
-              let updated = prev;
+              const updated = [...prev];
 
               // Level 15: shiftLine — every 6 fails, shift a row/column at last card position
               if (roundCondition?.id === 'shiftLine' && newFailCount % 6 === 0) {
@@ -1189,35 +1292,119 @@ function App() {
         }
       }
     },
-    [cards, flippedCards, isActive, gameWon, gameOver, boardFrozen, trapEmojis, bonusMap, grantBonus, roundModifiers, markedTraps, trapDefs, roundCondition, sectionPhase, cardsOpenedInPhase, failCounter]
+    [cards, flippedCards, isActive, gameWon, gameOver, boardFrozen, trapPairIds, bonusMap, grantBonus, roundModifiers, markedTraps, trapDefs, roundCondition, sectionPhase, cardsOpenedInPhase, failCounter]
   );
 
   const handleRestart = () => {
     setLevel(1);
     initLevel(1);
     setBonuses([]);
+    setScore(0);
+    setBonusesCollected(0);
+    setTrapsTriggered(0);
+    setTriggeredTrapIds(new Set());
+    setShowNameEntry(false);
+    setPlayerName('');
     setShowIntro(false);
     if (freezeTimerRef.current) clearTimeout(freezeTimerRef.current);
   };
 
-  // Backdoor: 6 clicks on Рекорд reveals all non-trap cards
+  // Backdoor: 6 clicks on Рекорд reveals all non-trap cards + grants bonuses
   const handleBackdoor = useCallback(() => {
     if (backdoorTimerRef.current) clearTimeout(backdoorTimerRef.current);
     setBackdoorClicks(prev => {
       const next = prev + 1;
       if (next >= 6) {
-        setCards(prevCards => prevCards.map(card =>
-          !trapEmojis.includes(card.emoji) ? { ...card, isFlipped: true, isMatched: true, contentHidden: false } : card
-        ));
-        showBonusMsg('🔓 Бэкдор! Все карточки открыты!');
+        // First: reveal bonus cards and grant their bonuses
+        setCards(prevCards => {
+          const bonusCards = prevCards.filter(c => availableBonuses.includes(c.pairId));
+          bonusCards.forEach(c => {
+            if (availableBonuses.includes(c.pairId)) {
+              grantBonus(c.pairId);
+              setAvailableBonuses(prev => prev.filter(e => e !== c.pairId));
+              setBonusesCollected(prev => prev + 1);
+            }
+          });
+          return prevCards.map(card =>
+            availableBonuses.includes(card.pairId) || (availableBonuses.length === 0 && bonusMap[card.pairId])
+              ? { ...card, isFlipped: true, isMatched: true, contentHidden: false }
+              : card
+          );
+        });
+        // Then: reveal remaining non-trap cards after 500ms
+        setTimeout(() => {
+          setCards(prevCards => prevCards.map(card =>
+            !trapPairIds.includes(card.pairId) ? { ...card, isFlipped: true, isMatched: true, contentHidden: false } : card
+          ));
+        }, 500);
+        showBonusMsg('🔓 Бэкдор! Все карточки открыты + бонусы получены!');
         return 0;
       }
       backdoorTimerRef.current = setTimeout(() => setBackdoorClicks(0), 2000);
       return next;
     });
-  }, [trapEmojis]);
+  }, [trapPairIds, availableBonuses, bonusMap, grantBonus]);
 
   const config = LEVELS[Math.min(level - 1, LEVELS.length - 1)];
+
+  // Cloud positions for round 11 — simple spiral with collision check during placement
+  const [cloudPos, setCloudPos] = useState<{ x: number; y: number }[]>([]);
+
+  useEffect(() => {
+    if (roundCondition?.id !== 'floating' || cards.length === 0) {
+      setCloudPos([]);
+      return;
+    }
+    const W = 900, H = 700; // much larger container
+    const cx = W / 2, cy = H / 2;
+    const cardW = 80, cardH = 80;
+    const minDist = cardW + 20; // minimum distance between centers
+
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    const positions: { x: number; y: number }[] = [];
+
+    for (let i = 0; i < cards.length; i++) {
+      const angle = i * goldenAngle;
+      let radius = 40; // start from center with some offset
+      let placed = false;
+
+      // Increase radius until we find a non-overlapping position
+      for (let r = radius; r < Math.max(W, H); r += 10) {
+        const px = cx + Math.cos(angle) * r - cardW / 2;
+        const py = cy + Math.sin(angle) * r - cardH / 2;
+
+        // Bounds check
+        if (px < 0 || py < 0 || px + cardW > W || py + cardH > H) continue;
+
+        // Collision check
+        let overlap = false;
+        for (const p of positions) {
+          const dx = (px + cardW / 2) - (p.x + cardW / 2);
+          const dy = (py + cardH / 2) - (p.y + cardH / 2);
+          if (Math.hypot(dx, dy) < minDist) {
+            overlap = true;
+            break;
+          }
+        }
+
+        if (!overlap) {
+          positions.push({ x: px, y: py });
+          placed = true;
+          break;
+        }
+      }
+
+      // Fallback: place at angle on outer boundary
+      if (!placed) {
+        const outerRadius = Math.min(W, H) / 2 - cardW / 2 - 20;
+        const px = cx + Math.cos(angle) * outerRadius - cardW / 2;
+        const py = cy + Math.sin(angle) * outerRadius - cardH / 2;
+        positions.push({ x: px, y: py });
+      }
+    }
+
+    setCloudPos(positions);
+  }, [roundCondition?.id, cards.length]);
 
   // Calculate card size based on available space and card count
   const getCardSize = (): React.CSSProperties => {
@@ -1250,8 +1437,15 @@ function App() {
 
       <div className="flex flex-col h-full px-3 py-2 w-full mx-auto relative z-10">
         {/* Bonus/Trap message popups */}
+        {trapShiftCountdown !== null && (
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-40">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white px-4 py-2 rounded-xl shadow-2xl font-bold text-sm border-2 border-purple-400 flex items-center gap-2">
+              🔮 Перемещение через <span className="text-yellow-300 text-lg">{trapShiftCountdown}</span>с
+            </div>
+          </div>
+        )}
         {bonusMessage && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50">
             <div className="animate-bounceIn bg-gradient-to-r from-amber-400 to-yellow-500 text-gray-900 px-4 py-2 rounded-xl shadow-2xl font-bold text-sm border-2 border-yellow-300">
               {bonusMessage}
             </div>
@@ -1275,40 +1469,53 @@ function App() {
           onRestart={() => setShowRestartConfirm(true)}
           onBackdoor={handleBackdoor}
           onFAQ={() => setShowFAQ(true)}
+          onLongRightPress={() => setShowLevelSelect(true)}
           timerFrozen={timerFrozen}
           boardFrozen={boardFrozen}
         />
 
         {/* Main game area: Bonuses | Board | Traps */}
-        <div className="flex-1 flex gap-2 min-h-0 mt-2">
-          {/* Left panel: Bonuses */}
-          <div className="flex-1 flex flex-col items-end gap-1.5 overflow-y-auto py-1">
+        <div className="flex-1 flex flex-col lg:flex-row gap-2 min-h-0 mt-2">
+          {/* Left panel: Bonuses — hidden on small screens, shown below on medium */}
+          <div className="hidden lg:flex flex-1 flex-col items-end gap-1.5 overflow-y-auto py-1">
             <div className="text-sm text-green-300 uppercase font-bold w-full text-right">🎁 Бонусы</div>
             {(() => {
-              // Available bonuses: not yet collected, shown as pending
-              const availableEntries = availableBonuses.map(emoji => ({ emoji, bonusType: bonusMap[emoji] })).filter(e => e.bonusType);
+              // Available bonuses: not yet collected, shown as pending (hidden in color match round — no emojis)
+              const availableEntries = level === 8 ? [] : availableBonuses.map(pairId => ({ pairId, bonusType: bonusMap[pairId] })).filter(e => e.bonusType);
               // Collected bonuses: have count > 0
               const collectedBonuses = bonuses.filter(b => b.count > 0);
               return <>
-                {availableEntries.map((info) => (
-                  <div key={info.emoji}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-400/15 bg-green-500/5 text-lg opacity-60"
-                  >
-                    <span className="text-2xl">{info.bonusType.emoji}</span>
-                    <span className="text-xs text-green-400/50">{info.bonusType.name}</span>
-                    <span className="text-xs text-green-400/30">?</span>
-                  </div>
-                ))}
-                {collectedBonuses.map((bonus) => (
-                  <div key={bonus.id}
-                    onClick={!gameWon && !gameOver && !boardFrozen ? () => handleUseBonus(bonus.id) : undefined}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-400/30 bg-green-500/10 text-lg cursor-pointer hover:bg-green-500/20 hover:scale-105 active:scale-95 transition-all"
-                  >
-                    <span className="text-3xl">{bonus.emoji}</span>
-                    <span className="text-sm text-green-400/70">{bonus.description}</span>
-                    <span className="px-2 py-1 font-bold rounded text-sm bg-green-400 text-green-900">×{bonus.count}</span>
-                  </div>
-                ))}
+                {availableEntries.length > 0 && (
+                  <div className="text-xs text-green-400/50 uppercase w-full text-right border-b border-green-400/20 pb-1 mb-1">Можно получить</div>
+                )}
+                {availableEntries.map((info) => {
+                  const displayEmoji = cards.find(c => c.pairId === info.pairId)?.emoji || info.pairId;
+                  return (
+                    <div key={info.pairId}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-400/15 bg-green-500/5 text-lg opacity-60"
+                    >
+                      <span className="text-3xl">{displayEmoji}</span>
+                      <span className="text-sm text-green-400/70">{info.bonusType.description}</span>
+                      <span className="px-2 py-1 font-bold rounded text-sm bg-indigo-700 text-indigo-400">×0</span>
+                    </div>
+                  );
+                })}
+                {collectedBonuses.length > 0 && (
+                  <div className="text-xs text-yellow-400/70 uppercase w-full text-right border-b border-yellow-400/20 pb-1 mb-1 mt-2">Полученные</div>
+                )}
+                {collectedBonuses.map((bonus) => {
+                  const cardEmoji = bonus.cardEmoji || Object.entries(bonusMap).find(([, b]) => b.id === bonus.id)?.[0] || '';
+                  return (
+                    <div key={bonus.id}
+                      onClick={!gameWon && !gameOver && !boardFrozen ? () => handleUseBonus(bonus.id) : undefined}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-yellow-400/30 bg-yellow-500/10 text-lg cursor-pointer hover:bg-yellow-500/20 hover:scale-105 active:scale-95 transition-all"
+                    >
+                      {cardEmoji && <span className="text-3xl">{cardEmoji}</span>}
+                      <span className="text-sm text-yellow-400/70">{bonus.description}</span>
+                      <span className="px-2 py-1 font-bold rounded text-sm bg-green-400 text-green-900">×{bonus.count}</span>
+                    </div>
+                  );
+                })}
                 {availableEntries.length === 0 && collectedBonuses.length === 0 && (
                   <div className="text-sm text-green-400/40 italic">Нет бонусов</div>
                 )}
@@ -1318,71 +1525,117 @@ function App() {
 
           {/* Center: Game Board — same width as header */}
           <div className={`shrink-0 max-w-[896px] w-full flex items-center justify-center bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10 transition-all ${boardFrozen ? 'board-frozen' : ''}`}>
-            <div className="flex flex-wrap justify-center gap-3" style={{ maxWidth: getGridMaxWidth() }}>
-              {cards.map((card, index) => (
-                <Card
-                  key={`${level}-${card.id}`}
-                  emoji={card.emoji}
-                  isFlipped={card.isFlipped}
-                  isMatched={card.isMatched}
-                  isWrong={card.isWrong}
-                  isHinted={card.isHinted}
-                  onClick={() => handleCardClick(index)}
-                  onContextMenu={(e) => handleRightClick(index, e)}
-                  isMarkedTrap={markedTraps.has(index)}
-                  disabled={flippedCards.length === 2 || gameWon || gameOver || boardFrozen}
-                  index={index}
-                  cardSize={getCardSize()}
-                  isFloating={roundModifiers.floating || roundCondition?.id === 'floating'}
-                  isSilhouette={roundModifiers.silhouetteOpen && card.isFlipped && !card.isMatched}
-                  isBlurred={roundModifiers.blurCount > 0 && card.isFlipped && !card.isMatched}
-                  isGhost={roundModifiers.ghostMode}
-                  rotation={card.rotation}
-                  colorIndex={card.colorIndex}
-                  isSlowOpen={roundModifiers.slowOpen}
-                  isContentHidden={card.contentHidden}
-                  isSectionBlocked={(() => {
-                    if (roundCondition?.id !== 'sections') return false;
-                    const cols = cards.length > 14 ? 6 : 4;
-                    const rows = Math.ceil(cards.length / cols);
-                    const row = Math.floor(index / cols);
-                    const col = index % cols;
-                    const sectionRow = row < rows / 2 ? 0 : 1;
-                    const sectionCol = col < cols / 2 ? 0 : 1;
-                    const sectionNum = sectionRow * 2 + sectionCol;
-                    const isEvenSection = sectionNum % 2 === 0;
-                    return (sectionPhase === 0 && !isEvenSection) || (sectionPhase === 1 && isEvenSection);
-                  })()}
-                />
-              ))}
-            </div>
+            {roundCondition?.id === 'floating' ? (
+              <div className="cloud-rotate relative" style={{ width: '900px', height: '700px' }}>
+                {cards.map((card, index) => {
+                  const pos = cloudPos[index] || { x: 0, y: 0 };
+                  return (
+                    <div key={`${level}-${card.id}`} className="absolute transition-all duration-300 ease-out" style={{ left: `${pos.x}px`, top: `${pos.y}px` }}>
+                      <Card
+                        emoji={card.emoji}
+                        isFlipped={card.isFlipped}
+                        isMatched={card.isMatched}
+                        isWrong={card.isWrong}
+                        isHinted={card.isHinted}
+                        onClick={() => handleCardClick(index)}
+                        onContextMenu={(e) => handleRightClick(index, e)}
+                        isMarkedTrap={markedTraps.has(index)}
+                        disabled={flippedCards.length === 2 || gameWon || gameOver || (boardFrozen && !roundModifiers.paused)}
+                        index={index}
+                        cardSize={getCardSize()}
+                        isSilhouette={roundModifiers.silhouetteOpen && card.isFlipped && !card.isMatched}
+                        isBlurred={card.isBlurred || false}
+                        isGhost={roundModifiers.ghostMode}
+                        rotation={card.rotation}
+                        colorIndex={card.colorIndex}
+                        isSlowOpen={roundModifiers.slowOpen}
+                        isContentHidden={card.contentHidden}
+                        isColorMode={false}
+                        isSectionBlocked={false}
+                        isTriggeredTrap={triggeredTrapIds.has(card.pairId)}
+                        isSwapping={swappingIndices.has(index)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div ref={boardRef} className="flex flex-wrap justify-center gap-3" style={{ maxWidth: getGridMaxWidth() }}>
+                {cards.map((card, index) => (
+                  <Card
+                    key={`${level}-${card.id}`}
+                    emoji={card.emoji}
+                    isFlipped={card.isFlipped}
+                    isMatched={card.isMatched}
+                    isWrong={card.isWrong}
+                    isHinted={card.isHinted}
+                    onClick={() => handleCardClick(index)}
+                    onContextMenu={(e) => handleRightClick(index, e)}
+                    isMarkedTrap={markedTraps.has(index)}
+                    disabled={flippedCards.length === 2 || gameWon || gameOver || (boardFrozen && !roundModifiers.paused)}
+                    index={index}
+                    cardSize={getCardSize()}
+                    isFloating={roundModifiers.floating || roundCondition?.id === 'floating'}
+                    isSilhouette={roundModifiers.silhouetteOpen && card.isFlipped && !card.isMatched}
+                    isBlurred={card.isBlurred || false}
+                    isGhost={roundModifiers.ghostMode}
+                    rotation={card.rotation}
+                    colorIndex={card.colorIndex}
+                    isSlowOpen={roundModifiers.slowOpen}
+                    isContentHidden={card.contentHidden}
+                    isColorMode={roundCondition?.id === 'colorMatch'}
+                    isTriggeredTrap={triggeredTrapIds.has(card.pairId)}
+                    isSwapping={swappingIndices.has(index)}
+                    isSectionBlocked={(() => {
+                      if (roundCondition?.id !== 'sections') return false;
+                      const cols = cards.length > 14 ? 6 : 4;
+                      const rows = Math.ceil(cards.length / cols);
+                      const row = Math.floor(index / cols);
+                      const col = index % cols;
+                      const sectionRow = row < rows / 2 ? 0 : 1;
+                      const sectionCol = col < cols / 2 ? 0 : 1;
+                      const sectionNum = sectionRow * 2 + sectionCol;
+                      const isEvenSection = sectionNum % 2 === 0;
+                      return (sectionPhase === 0 && !isEvenSection) || (sectionPhase === 1 && isEvenSection);
+                    })()}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Right panel: Traps */}
-          <div className="flex-1 flex flex-col items-start gap-1.5 overflow-y-auto py-1">
+          {/* Right panel: Traps — hidden on small screens */}
+          <div className="hidden lg:flex flex-1 flex-col items-start gap-1.5 overflow-y-auto py-1">
             <div className="text-sm text-red-300 uppercase font-bold">⚠️ Ловушки</div>
-            {trapEmojis.map((emoji, i) => {
+            {trapPairIds.map((pairId, i) => {
               const def = trapDefs[i];
-              const trapCardIndices = cards.map((c, idx) => ({ c, idx })).filter(x => x.c.emoji === emoji).map(x => x.idx);
+              const trapCardIndices = cards.map((c, idx) => ({ c, idx })).filter(x => x.c.pairId === pairId).map(x => x.idx);
               const mc = trapCardIndices.filter(idx => markedTraps.has(idx)).length;
               const isNeutralized = mc >= 2;
+              const isTriggered = triggeredTrapIds.has(pairId);
+              const displayEmoji = cards.find(c => c.pairId === pairId)?.emoji || pairId;
               return (
-                <div key={emoji} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-lg ${isNeutralized ? 'border-green-400/30 bg-green-500/10' : 'border-red-400/30 bg-red-500/10'}`}>
-                  <span className="text-3xl" style={{ filter: 'grayscale(1) brightness(0.15) contrast(3)' }}>{emoji}</span>
-                  <span className={`px-2 py-1 font-bold rounded text-sm ${isNeutralized ? 'bg-green-400 text-green-900' : 'bg-red-500/60 text-red-200'}`}>
-                    ×{mc}/2
-                  </span>
+                <div key={pairId} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-lg ${isNeutralized ? 'border-green-400/30 bg-green-500/10' : isTriggered ? 'border-red-400/60 bg-red-500/30 shadow-lg shadow-red-500/30' : 'border-red-400/30 bg-red-500/10'}`}>
+                  <span className="text-3xl" style={{ filter: 'grayscale(1) brightness(0.15) contrast(3)' }}>{displayEmoji}</span>
                   <span className="text-sm text-red-400/70">{def?.description || 'Штраф!'}</span>
                   {isNeutralized && <span className="text-base">🛡️</span>}
+                  {isTriggered && !isNeutralized && <span className="text-base">🔥</span>}
                 </div>
               );
             })}
-            {trapEmojis.length === 0 && (
+            {trapPairIds.length === 0 && (
               <div className="text-sm text-red-400/40 italic">Нет ловушек</div>
             )}
             <div className="text-sm text-red-400/50 mt-1">
-              ПКМ = пометить
+              {roundCondition?.id === 'trapShift' ? '🚫 Пометка недоступна' : 'ПКМ = пометить'}
             </div>
+          </div>
+        </div>
+
+        {/* Compact info bar for narrow screens */}
+        <div className="lg:hidden flex gap-2 mt-1 text-xs">
+          <div className="flex-1 bg-green-500/10 rounded-lg px-2 py-1 border border-green-400/20">
+            <span className="text-green-300">🎁</span> {bonuses.filter(b => b.count > 0).reduce((s, b) => s + b.count, 0)} бонусов
           </div>
         </div>
 
@@ -1429,26 +1682,60 @@ function App() {
           </div>
         )}
 
+        {/* Level selector backdoor overlay */}
+        {showLevelSelect && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
+            <div className="bg-gradient-to-br from-indigo-700 to-purple-800 rounded-3xl p-8 text-center shadow-2xl border border-indigo-300/30 max-w-md mx-4 animate-bounceIn">
+              <div className="text-4xl mb-3">🔓</div>
+              <h2 className="text-xl font-bold mb-4 text-white">Выбор раунда</h2>
+              <div className="grid grid-cols-4 gap-2 mb-4">
+                {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map(lvl => (
+                  <button
+                    key={lvl}
+                    onClick={() => {
+                      setLevel(lvl);
+                      initLevel(lvl);
+                      setShowLevelSelect(false);
+                    }}
+                    className={`px-3 py-2 rounded-lg font-bold text-sm transition-all hover:scale-105 active:scale-95 ${lvl === level ? 'bg-yellow-400 text-yellow-900' : 'bg-indigo-500/60 text-white hover:bg-indigo-400/60'}`}
+                  >
+                    {lvl}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowLevelSelect(false)}
+                className="px-6 py-2.5 bg-indigo-500 text-white font-bold rounded-xl shadow-lg hover:bg-indigo-400 hover:scale-105 transition-all active:scale-95"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* FAQ overlay */}
         {showFAQ && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
-            <div className="bg-gradient-to-br from-cyan-700 to-indigo-800 rounded-3xl p-8 text-center shadow-2xl border border-cyan-300/30 max-w-lg mx-4 animate-bounceIn">
-              <h2 className="text-2xl font-bold text-white mb-4">❓ Как играть</h2>
-              <p>🖱️ <strong className="text-white">ЛКМ</strong> — открыть карточку</p>
-              <p>🖱️ <strong className="text-white">ПКМ</strong> — пометить ловушку (если обе карточки пары помечены — ловушка нейтрализуется)</p>
-              <p>⏱️ Соберите все пары за отведённое время</p>
-              <p>🎁 <strong className="text-green-300">Бонусы</strong> — каждая пара даёт бонус! Если открытая пара не совпадает с доступным бонусом, верхний бонус теряется</p>
-              <p>⚠️ <strong className="text-red-300">Ловушки</strong> — помечайте ПКМ, чтобы избежать штрафа</p>
-              <p>🏆 <strong className="text-yellow-300">Очки</strong> = оставшиеся секунды × (бонусы − ловушки)</p>
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-8 text-center shadow-2xl border border-indigo-300/30 max-w-md mx-4 animate-bounceIn">
+              <h2 className="text-3xl font-bold mb-4 text-white">❓ Как играть</h2>
+              <div className="text-indigo-100 text-base text-left space-y-3 mb-6">
+                <p>🖱️ <strong className="text-white">ЛКМ</strong> на квадраты — собирайте пары одинаковых карточек.</p>
+                <p>⏱️ У вас ограниченное <strong className="text-white">время</strong> — успейте собрать все пары!</p>
+                <p>🎁 Некоторые пары дают <strong className="text-green-300">бонусы</strong>, которые можно копить и использовать.</p>
+                <p>⚠️ Некоторые пары — <strong className="text-red-300">ловушки</strong>, которые дают штрафы.</p>
+                <p>🛡️ Отмечайте ловушки <strong className="text-white">ПКМ</strong> — если обе карточки пары помечены, ловушка нейтрализуется!</p>
+                <p>🎲 С <strong className="text-white">8 по 16 раунд</strong> появляются сложные дополнительные условия!</p>
+                <p>🏆 <strong className="text-yellow-300">Очки</strong> = оставшиеся секунды × (бонусы − ловушки)</p>
+              </div>
               {roundCondition && (
-                <div className="border-t border-cyan-400/30 pt-3 mb-3">
-                  <h3 className="text-lg font-bold text-cyan-200 mb-2">{roundCondition.emoji} Особенность раунда {level}</h3>
-                  <p className="text-cyan-100 text-sm">{roundCondition.description}</p>
+                <div className="border-t border-indigo-400/30 pt-3 mb-3">
+                  <h3 className="text-lg font-bold text-indigo-200 mb-2">{roundCondition.emoji} Особенность раунда {level}</h3>
+                  <p className="text-indigo-100 text-sm">{roundCondition.description}</p>
                 </div>
               )}
               <button
                 onClick={() => setShowFAQ(false)}
-                className="px-8 py-3 bg-white text-cyan-700 font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95 text-lg"
+                className="px-8 py-3 bg-white text-indigo-700 font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95 text-lg"
               >
                 Понятно!
               </button>
@@ -1468,6 +1755,7 @@ function App() {
                 <p>🎁 Некоторые пары дают <strong className="text-green-300">бонусы</strong>, которые можно копить и использовать.</p>
                 <p>⚠️ Некоторые пары — <strong className="text-red-300">ловушки</strong>, которые дают штрафы.</p>
                 <p>🛡️ Отмечайте ловушки <strong className="text-white">ПКМ</strong> — если обе карточки пары помечены, ловушка нейтрализуется!</p>
+                <p>🎲 С <strong className="text-white">8 по 16 раунд</strong> появляются сложные дополнительные условия!</p>
               </div>
               <button
                 onClick={() => setShowIntro(false)}

@@ -21,6 +21,9 @@ interface CardProps {
   colorIndex?: number;
   isSlowOpen?: boolean;
   isContentHidden?: boolean;
+  isColorMode?: boolean;
+  isTriggeredTrap?: boolean;
+  isSwapping?: boolean;
 }
 
 // 5 different idle animation keyframes as inline styles
@@ -32,27 +35,27 @@ const IDLE_ANIMATIONS: React.CSSProperties[] = [
   { animationName: 'card-squish', animationDuration: '3.8s', animationTimingFunction: 'ease-in-out', animationIterationCount: 'infinite' },
 ];
 
-const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onContextMenu, disabled, isWrong, isHinted, isMarkedTrap, index, cardSize, isFloating, isSilhouette, isBlurred, isGhost, rotation, isSectionBlocked, colorIndex, isSlowOpen, isContentHidden }) => {
+const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onContextMenu, disabled, isWrong, isHinted, isMarkedTrap, index, cardSize, isFloating, isSilhouette, isBlurred, isGhost, rotation, isSectionBlocked, colorIndex, isSlowOpen, isContentHidden, isColorMode, isTriggeredTrap, isSwapping }) => {
   const [sparkles, setSparkles] = useState<Array<{ id: number; x: number; y: number }>>([]);
 
-  // Color palette for level 8 — cold to warm shades
+  // Color palette for level 8 — strong contrasting colors
   const COLOR_PALETTE = [
-    'from-blue-200 to-blue-400 border-blue-300',     // cold
-    'from-cyan-200 to-cyan-400 border-cyan-300',
-    'from-teal-200 to-teal-400 border-teal-300',
-    'from-green-200 to-green-400 border-green-300',
-    'from-lime-200 to-lime-400 border-lime-300',
-    'from-yellow-200 to-yellow-400 border-yellow-300',
-    'from-amber-200 to-amber-400 border-amber-300',
-    'from-orange-200 to-orange-400 border-orange-300',
-    'from-red-200 to-red-400 border-red-300',         // warm
-    'from-rose-200 to-rose-400 border-rose-300',
-    'from-pink-200 to-pink-400 border-pink-300',
-    'from-fuchsia-200 to-fuchsia-400 border-fuchsia-300',
-    'from-purple-200 to-purple-400 border-purple-300',
-    'from-violet-200 to-violet-400 border-violet-300',
-    'from-indigo-200 to-indigo-400 border-indigo-300',
-    'from-sky-200 to-sky-400 border-sky-300',
+    'from-red-500 to-red-700 border-red-400',           // red
+    'from-blue-500 to-blue-700 border-blue-400',         // blue
+    'from-green-500 to-green-700 border-green-400',       // green
+    'from-yellow-400 to-yellow-600 border-yellow-300',    // yellow
+    'from-purple-500 to-purple-700 border-purple-400',    // purple
+    'from-orange-500 to-orange-700 border-orange-400',    // orange
+    'from-cyan-400 to-cyan-600 border-cyan-300',          // cyan
+    'from-pink-400 to-pink-600 border-pink-300',          // pink
+    'from-teal-500 to-teal-700 border-teal-400',          // teal
+    'from-amber-400 to-amber-600 border-amber-300',        // amber
+    'from-indigo-500 to-indigo-700 border-indigo-400',    // indigo
+    'from-lime-400 to-lime-600 border-lime-300',          // lime
+    'from-fuchsia-500 to-fuchsia-700 border-fuchsia-400', // fuchsia
+    'from-rose-400 to-rose-600 border-rose-300',          // rose
+    'from-emerald-500 to-emerald-700 border-emerald-400', // emerald
+    'from-sky-400 to-sky-600 border-sky-300',             // sky
   ];
   const colorBgClass = colorIndex !== undefined ? `bg-gradient-to-br ${COLOR_PALETTE[colorIndex % COLOR_PALETTE.length]}` : '';
 
@@ -69,15 +72,15 @@ const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onCon
     }
   }, [isMatched]);
 
-  const idleAnimStyle = IDLE_ANIMATIONS[index % IDLE_ANIMATIONS.length];
+  const idleAnimStyle = !isMatched && !isFlipped ? IDLE_ANIMATIONS[index % IDLE_ANIMATIONS.length] : {};
   const animDelay = (index * 0.4) % 2;
 
   const sizeStyle = cardSize || { width: '80px', height: '80px', fontSize: '32px' };
 
   return (
     <div
-      className={`relative cursor-pointer perspective-1000 transition-all duration-300 ${disabled ? 'pointer-events-none' : ''
-        } ${isMatched ? 'opacity-80' : ''} ${isHinted ? 'animate-hint-glow' : ''} ${isFloating ? 'animate-card-float' : ''} ${isSectionBlocked ? 'opacity-40 pointer-events-none' : ''}`}
+      className={`relative cursor-pointer select-none perspective-1000 transition-all duration-300 ${disabled ? 'pointer-events-none' : ''
+        } ${isMatched ? 'opacity-80' : ''} ${isHinted ? 'animate-hint-glow' : ''} ${isFloating ? 'animate-card-float' : ''} ${isSectionBlocked ? 'opacity-40 pointer-events-none' : ''} ${isSwapping ? 'scale-0' : ''} `}
       style={{
         ...sizeStyle,
         ...(isGhost ? { opacity: 0.7 } : {}),
@@ -113,24 +116,32 @@ const Card: React.FC<CardProps> = ({ emoji, isFlipped, isMatched, onClick, onCon
 
         {/* Back of card (revealed state) */}
         <div
-          className={`absolute w-full h-full backface-hidden rotate-y-180 rounded-xl shadow-lg flex items-center justify-center border-2 ${colorBgClass
-            ? colorBgClass
-            : isHinted
-              ? 'bg-gradient-to-br from-cyan-300 to-blue-400 border-cyan-200'
-              : isMatched
-                ? 'bg-gradient-to-br from-green-400 to-emerald-500 border-green-300'
-                : isWrong
-                  ? 'bg-gradient-to-br from-red-400 to-red-500 border-red-300 animate-wrong'
-                  : 'bg-gradient-to-br from-yellow-100 to-orange-100 border-yellow-300'
+          className={`absolute w-full h-full backface-hidden rotate-y-180 rounded-xl shadow-lg flex items-center justify-center border-2 ${isSilhouette && isContentHidden
+            ? 'bg-black/80 border-gray-700'
+            : colorBgClass
+              ? colorBgClass
+              : isHinted
+                ? 'bg-gradient-to-br from-cyan-300 to-blue-400 border-cyan-200'
+                : isMatched
+                  ? isTriggeredTrap
+                    ? 'bg-gradient-to-br from-red-400 to-red-500 border-red-300'
+                    : 'bg-gradient-to-br from-green-400 to-emerald-500 border-green-300'
+                  : isWrong
+                    ? 'bg-gradient-to-br from-red-400 to-red-500 border-red-300 animate-wrong'
+                    : 'bg-gradient-to-br from-yellow-100 to-orange-100 border-yellow-300'
             }`}
           style={{
             fontSize: sizeStyle.fontSize,
             ...(rotation ? { transform: `rotate(${rotation}deg)` } : {}),
-            ...(isSilhouette ? { filter: 'grayscale(1) brightness(0.3) contrast(3)' } : {}),
             ...(isBlurred ? { filter: 'blur(6px)' } : {}),
           }}
         >
-          {isContentHidden ? '' : emoji}
+          {isColorMode ? null : (
+            <span style={{
+              ...(isContentHidden && !isSilhouette ? { opacity: 0 } : {}),
+              ...(isSilhouette ? { filter: 'grayscale(1) brightness(0.3) contrast(3)' } : {}),
+            }}>{emoji}</span>
+          )}
 
           {/* Sparkles effect for matched cards */}
           {isMatched && sparkles.map((sparkle) => (
