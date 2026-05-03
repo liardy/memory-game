@@ -798,7 +798,7 @@ function App() {
     if (cards.length === 0 || levelCompleting) return;
     // All non-trap cards must be matched; trap cards are never opened
     const allNonTrapMatched = cards.every((card) =>
-      card.isMatched || trapPairIds.includes(card.pairId)
+      card.isMatched || card.isFlipped || trapPairIds.includes(card.pairId)
     );
     if (allNonTrapMatched && !gameWon && !gameOver) {
       setLevelCompleting(true);
