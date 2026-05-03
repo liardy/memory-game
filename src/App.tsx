@@ -760,8 +760,11 @@ function App() {
   const grantBonus = useCallback((pairId: string) => {
     const bonusDef = bonusMap[pairId];
     if (!bonusDef) return;
-    // Guard against double-granting (e.g. React double invoke)
-    if (grantedRef.current.has(pairId)) return;
+    // Guard against double-granting
+    if (grantedRef.current.has(pairId)) {
+      console.log(`[GRANT BONUS BLOCKED] pairId=${pairId} — already granted`);
+      return;
+    }
     grantedRef.current.add(pairId);
 
     // Find display emoji for this pairId (for level 8, display differs from pairId)
