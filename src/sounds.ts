@@ -161,14 +161,62 @@ const MUSIC_TRACKS = [
   '/music/tunetank-cyberpunk-futuristic-background-349787.mp3',
 ];
 
+const MUSIC_VOLUME = 0.15; // 50% of previous 0.3
+const FADE_DURATION = 1.0; // 1 second fade
+
 let currentAudio: HTMLAudioElement | null = null;
+let musicGainNode: GainNode | null = null;
+let musicSource: MediaElementAudioSourceNode | null = null;
+
+function getMusicGain(): GainNode {
+  const c = getCtx();
+  if (!musicGainNode) {
+    // Compressor to normalize loudness across tracks
+    const compressor = c.createDynamicsCompressor();
+    compressor.threshold.value = -20;
+    compressor.knee.value = 10;
+    compressor.ratio.value = 12;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.25;
+
+    musicGainNode = c.createGain();
+    musicGainNode.gain.value = MUSIC_VOLUME;
+
+    musicGainNode.connect(compressor);
+    compressor.connect(c.destination);
+  }
+  return musicGainNode;
+}
+
+function connectAudioToGain(audio: HTMLAudioElement) {
+  const c = getCtx();
+  // Disconnect previous source if any
+  if (musicSource) {
+    try { musicSource.disconnect(); } catch { /* already disconnected */ }
+  }
+  try {
+    musicSource = c.createMediaElementSource(audio);
+    musicSource.connect(getMusicGain());
+  } catch {
+    // MediaElementSource can only be created once per audio element
+    // If reused, just use volume fallback
+    audio.volume = MUSIC_VOLUME;
+  }
+}
 
 export function startRoundMusic() {
-  stopRoundMusic();
   const track = MUSIC_TRACKS[Math.floor(Math.random() * MUSIC_TRACKS.length)];
   const audio = new Audio(track);
   audio.loop = true;
-  audio.volume = 0.3;
+  audio.crossOrigin = 'anonymous';
+  connectAudioToGain(audio);
+
+  // Fade in
+  const gain = getMusicGain();
+  const c = getCtx();
+  gain.gain.setValueAtTime(0.001, c.currentTime);
+  gain.gain.exponentialRampToValueAtTime(MUSIC_VOLUME, c.currentTime + FADE_DURATION);
+
   audio.play().catch(() => {
     // Autoplay blocked — will play after first user interaction
   });
@@ -176,9 +224,26 @@ export function startRoundMusic() {
 }
 
 export function stopRoundMusic() {
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.src = '';
-    currentAudio = null;
+  if (!currentAudio) return;
+  const audio = currentAudio;
+  currentAudio = null;
+
+  // Fade out
+  const gain = musicGainNode;
+  const c = ctx;
+  if (gain && c) {
+    gain.gain.setValueAtTime(gain.gain.value, c.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + FADE_DURATION);
+    setTimeout(() => {
+      audio.pause();
+      audio.src = '';
+      if (musicSource) {
+        try { musicSource.disconnect(); } catch { /* ok */ }
+        musicSource = null;
+      }
+    }, FADE_DURATION * 1000 + 100);
+  } else {
+    audio.pause();
+    audio.src = '';
   }
 }
