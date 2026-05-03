@@ -1530,10 +1530,10 @@ function App() {
                   const displayEmoji = cards.find(c => c.pairId === info.pairId)?.emoji || info.pairId;
                   return (
                     <div key={info.pairId}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-400/15 bg-green-500/10 text-lg opacity-60"
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-400/30 bg-green-500/10 text-lg"
                     >
                       <span className="text-3xl">{displayEmoji}</span>
-                      <span className="text-sm text-green-300">{info.bonusType.description}</span>
+                      <span className="text-sm text-green-200">{info.bonusType.description}</span>
                       <span className="px-2 py-1 font-bold rounded text-sm bg-indigo-700 text-indigo-400">×0</span>
                     </div>
                   );
@@ -1549,7 +1549,7 @@ function App() {
                       className="flex items-center gap-2 px-3 py-2 rounded-lg border border-yellow-400/30 bg-yellow-500/20 text-lg cursor-pointer hover:bg-yellow-500/30 hover:scale-105 active:scale-95 transition-all"
                     >
                       {cardEmoji && <span className="text-3xl">{cardEmoji}</span>}
-                      <span className="text-sm text-yellow-300">{bonus.description}</span>
+                      <span className="text-sm text-yellow-200">{bonus.description}</span>
                       <span className="px-2 py-1 font-bold rounded text-sm bg-green-400 text-green-900">×{bonus.count}</span>
                     </div>
                   );
