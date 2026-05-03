@@ -37,7 +37,7 @@ const EMOJI_BONUS_MAP: Record<string, Bonus> = {
   '🐉': { id: 'silhouettes', emoji: '🎭', name: 'Силуэты', description: 'На 3 сек показывает силуэты всех карт', count: 0 },
   '🦋': { id: 'sort', emoji: '📊', name: 'Сортировка', description: 'Собранные пары перемещаются вверх', count: 0 },
   '🌺': { id: 'show3pairs', emoji: '💡', name: 'Подсказка', description: 'На 1 сек показывает 3 случайные пары', count: 0 },
-  '🍄': { id: 'pause', emoji: '⏸️', name: 'Пауза', description: 'Останавливает игру, чтобы подумать', count: 0 },
+  '🍄': { id: 'pause', emoji: '⏸️', name: 'Пауза', description: 'Останавливает игру на 10 секунд', count: 0 },
   '⚡': { id: 'doublepoints', emoji: '✨', name: 'Двойные очки', description: '10 сек: удваивает очки за пары', count: 0 },
 };
 
@@ -906,9 +906,16 @@ function App() {
         case 'pause': {
           setTimerFrozen(true);
           setBoardFrozen(true);
-          showBonusMsg('⏸️ Пауза! Нажмите любую карту чтобы продолжить');
-          // Will be unpaused on next card click
+          showBonusMsg('⏸️ Пауза! 10 секунд чтобы подумать');
           setRoundModifiers(prev => ({ ...prev, paused: true }));
+          roundModifiersRef.current = { ...roundModifiersRef.current, paused: true };
+          // Auto-unpause after 10 seconds
+          setTimeout(() => {
+            setRoundModifiers(prev => ({ ...prev, paused: false }));
+            roundModifiersRef.current = { ...roundModifiersRef.current, paused: false };
+            setTimerFrozen(false);
+            setBoardFrozen(false);
+          }, 10000);
           break;
         }
         case 'doublepoints': {
@@ -927,8 +934,9 @@ function App() {
   const handleCardClick = useCallback(
     (index: number) => {
       // Pause: unpause on any click
-      if (roundModifiers.paused) {
+      if (roundModifiersRef.current.paused) {
         setRoundModifiers(prev => ({ ...prev, paused: false }));
+        roundModifiersRef.current = { ...roundModifiersRef.current, paused: false };
         setTimerFrozen(false);
         setBoardFrozen(false);
         return;
@@ -1570,7 +1578,7 @@ function App() {
                         onClick={() => handleCardClick(index)}
                         onContextMenu={(e) => handleRightClick(index, e)}
                         isMarkedTrap={markedTraps.has(index)}
-                        disabled={flippedCards.length === 2 || gameWon || gameOver || (boardFrozen && !roundModifiers.paused)}
+                        disabled={flippedCards.length === 2 || gameWon || gameOver || boardFrozen}
                         index={index}
                         cardSize={getCardSize()}
                         isSilhouette={roundModifiers.silhouetteOpen && card.isFlipped && !card.isMatched}
@@ -1602,7 +1610,7 @@ function App() {
                     onClick={() => handleCardClick(index)}
                     onContextMenu={(e) => handleRightClick(index, e)}
                     isMarkedTrap={markedTraps.has(index)}
-                    disabled={flippedCards.length === 2 || gameWon || gameOver || (boardFrozen && !roundModifiers.paused)}
+                    disabled={flippedCards.length === 2 || gameWon || gameOver || boardFrozen}
                     index={index}
                     cardSize={getCardSize()}
                     isFloating={roundModifiers.floating || roundCondition?.id === 'floating'}
